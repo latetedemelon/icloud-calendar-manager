@@ -107,6 +107,66 @@ def list_calendars():
     
     return [{'name': cal.name, 'url': cal.url} for cal in calendars]
 
+@safe_request
+def list_reminder_lists() -> Optional[List[Dict[str, str]]]:
+    """
+    List all available reminder lists.
+
+    Returns:
+        A list of dictionaries containing reminder list names and URLs, or None if an error occurs.
+    """
+    try:
+        client = get_caldav_client()
+        if not client:
+            return None
+
+        principal = client.principal()
+        calendars = principal.calendars()
+
+        reminder_lists = []
+        for cal in calendars:
+            if hasattr(cal, 'properties') and 'X-APPLE-SUBCALENDAR-TYPE' in cal.properties:
+                if cal.properties['X-APPLE-SUBCALENDAR-TYPE'] == 'reminder':
+                    reminder_lists.append({'name': cal.name, 'url': cal.url})
+
+        if not reminder_lists:
+            logger.info("No reminder lists found.")
+        return reminder_lists
+    except Exception as e:
+        logger.error(f"Error listing reminder lists: {e}")
+        return None
+
+
+@safe_request
+def get_reminders(reminder_list_name: str) -> Optional[List]:
+    """
+    Get reminders from a specific reminder list.
+
+    Args:
+        reminder_list_name: The name of the reminder list.
+
+    Returns:
+        A list of reminders or None if an error occurs.
+    """
+    try:
+        client = get_caldav_client()
+        if not client:
+            return None
+
+        principal = client.principal()
+        reminder_list = find_calendar(principal, reminder_list_name)
+
+        if reminder_list:
+            reminders = reminder_list.events()  # Similar to calendar events
+            return reminders
+        else:
+            logger.error(f"Reminder list '{reminder_list_name}' not found.")
+            return None
+    except Exception as e:
+        logger.error(f"Error retrieving reminders: {e}")
+        return None
+
+
 # Example usage
 if __name__ == "__main__":
     caldav_url = discover_caldav_calendars()
