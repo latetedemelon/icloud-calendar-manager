@@ -78,6 +78,7 @@ icloud-calendar calendars list --no-reminders     # calendars only
 # Events
 icloud-calendar events list --calendar "Home" --days 7
 icloud-calendar events list --calendar "Home" --start 2026-06-01 --end 2026-06-30
+icloud-calendar events get --calendar "Home" --uid <UID>
 icloud-calendar events add --calendar "Home" \
     --summary "Lunch with Sam" \
     --start 2026-06-01T12:00 --end 2026-06-01T13:00 \
@@ -187,7 +188,11 @@ tests/              # pytest suite (no network required)
 pip install -e ".[dev]"
 pytest                # run the test suite
 flake8 .              # lint
+python -m build       # build wheel + sdist (requires the `build` package)
 ```
+
+See [`CHANGELOG.md`](CHANGELOG.md) for release notes and
+[`DECISIONS.md`](DECISIONS.md) for the rationale behind key design choices.
 
 ## Notes & security
 

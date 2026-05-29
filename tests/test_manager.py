@@ -52,6 +52,20 @@ def test_list_events_filters_by_window(manager):
     assert [e.summary for e in june] == ["June"]
 
 
+def test_get_event(manager):
+    created = manager.add_event(
+        "Home", "Fetchable", dt.datetime(2026, 6, 1, 12), dt.datetime(2026, 6, 1, 13)
+    )
+    fetched = manager.get_event("Home", created.uid)
+    assert fetched.summary == "Fetchable"
+    assert fetched.uid == created.uid
+
+
+def test_get_missing_event_raises(manager):
+    with pytest.raises(ObjectNotFoundError):
+        manager.get_event("Home", "missing")
+
+
 def test_update_event_changes_fields(manager):
     created = manager.add_event(
         "Home", "Old", dt.datetime(2026, 6, 1, 12), dt.datetime(2026, 6, 1, 13)

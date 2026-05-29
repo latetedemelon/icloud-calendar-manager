@@ -81,6 +81,34 @@ def test_events_add_then_list(manager):
     assert any(e["summary"] == "Demo" for e in listed)
 
 
+def test_events_list_defaults_without_window(manager):
+    # Regression: `events list` with no --days/--start must not crash.
+    code, out = run(["events", "list", "--calendar", "Home"], manager)
+    assert code == 0
+    assert "(none)" in out
+
+
+def test_events_get(manager):
+    code, out = run(
+        [
+            "--json", "events", "add", "--calendar", "Home", "--summary", "Findme",
+            "--start", "2026-06-01T09:00", "--end", "2026-06-01T10:00",
+        ],
+        manager,
+    )
+    uid = json.loads(out)[0]["uid"]
+    code, out = run(
+        ["--json", "events", "get", "--calendar", "Home", "--uid", uid], manager
+    )
+    assert code == 0
+    assert json.loads(out)[0]["summary"] == "Findme"
+
+
+def test_events_get_missing_returns_error(manager):
+    code, _ = run(["events", "get", "--calendar", "Home", "--uid", "nope"], manager)
+    assert code == 1
+
+
 def test_reminders_add_list_done(manager):
     code, _ = run(
         ["reminders", "add", "--list", "Reminders", "--summary", "Task A"], manager

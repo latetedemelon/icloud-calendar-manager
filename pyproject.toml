@@ -38,6 +38,9 @@ Repository = "https://github.com/latetedemelon/icloud-calendar-manager"
 [tool.setuptools]
 packages = ["icloud_calendar_manager"]
 
+[tool.setuptools.package-data]
+icloud_calendar_manager = ["py.typed"]
+
 [tool.setuptools.dynamic]
 version = { attr = "icloud_calendar_manager.__version__" }
 

@@ -123,11 +123,17 @@ def _cmd_events_list(args, manager: CalendarManager, stream) -> int:
         start = dt.datetime.now()
         end = start + dt.timedelta(days=args.days)
     else:
-        start = args.start
+        start = args.start or dt.datetime.now()
         end = args.end or (start + dt.timedelta(days=7))
     events = manager.list_events(args.calendar, start, end)
     rows = [e.to_dict() for e in events]
     _emit(rows, ["start", "end", "summary", "uid"], args.json, stream)
+    return EXIT_OK
+
+
+def _cmd_events_get(args, manager: CalendarManager, stream) -> int:
+    event = manager.get_event(args.calendar, args.uid)
+    _emit([event.to_dict()], ["start", "end", "summary", "uid"], args.json, stream)
     return EXIT_OK
 
 
@@ -240,6 +246,11 @@ def build_parser() -> argparse.ArgumentParser:
     ev_list.add_argument("--start", type=parse_datetime, help="Window start (ISO).")
     ev_list.add_argument("--end", type=parse_datetime, help="Window end (ISO).")
     ev_list.set_defaults(func=_cmd_events_list)
+
+    ev_get = ev_sub.add_parser("get", help="Fetch a single event by UID.")
+    ev_get.add_argument("--calendar", required=True)
+    ev_get.add_argument("--uid", required=True)
+    ev_get.set_defaults(func=_cmd_events_get)
 
     ev_add = ev_sub.add_parser("add", help="Add an event.")
     ev_add.add_argument("--calendar", required=True)

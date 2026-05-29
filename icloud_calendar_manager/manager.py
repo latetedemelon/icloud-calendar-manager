@@ -216,6 +216,12 @@ class CalendarManager:
         logger.info("Created event %r (uid=%s) in %r", summary, uid, calendar_name)
         return EventInfo.from_caldav_object(obj, calendar_name)
 
+    def get_event(self, calendar_name: str, uid: str) -> EventInfo:
+        """Fetch a single event by UID."""
+        calendar = self._find_calendar(calendar_name)
+        obj = self._event_by_uid(calendar, uid)
+        return EventInfo.from_caldav_object(obj, calendar_name)
+
     def update_event(
         self,
         calendar_name: str,
