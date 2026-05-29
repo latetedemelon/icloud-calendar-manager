@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "icloud-calendar-manager"
+description = "Manage iCloud calendars, events and reminders over CalDAV (library + CLI)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["icloud", "caldav", "calendar", "reminders", "apple"]
+authors = [{ name = "iCloud Calendar Manager contributors" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Topic :: Office/Business :: Scheduling",
+]
+dynamic = ["version"]
+dependencies = [
+    "caldav>=1.3.5,<2.0",
+    "icalendar>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "flake8>=6.0",
+]
+
+[project.scripts]
+icloud-calendar = "icloud_calendar_manager.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/latetedemelon/icloud-calendar-manager"
+Repository = "https://github.com/latetedemelon/icloud-calendar-manager"
+
+[tool.setuptools]
+packages = ["icloud_calendar_manager"]
+
+[tool.setuptools.dynamic]
+version = { attr = "icloud_calendar_manager.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

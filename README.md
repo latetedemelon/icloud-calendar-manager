@@ -1,180 +1,207 @@
 # iCloud Calendar Manager
 
-This script provides a simple interface to interact with iCloud calendars using the CalDAV protocol.
+A small, tested Python toolkit and command-line interface for managing **iCloud
+calendars, events, and reminders** over the CalDAV protocol.
+
+It can be used three ways:
+
+- **CLI** — `icloud-calendar events list --calendar "Home" --days 7`
+- **Library** — `from icloud_calendar_manager import CalendarManager`
+- **Backwards-compatible helpers** — the original module-level functions
+  (`list_calendars()`, `get_apple_calendar_events()`, …) still work.
+
+## Features
+
+- 📅 List calendars and reminder lists
+- 🔎 List events in a date window (with recurrence expansion)
+- ➕ Create / ✏️ update / ❌ delete events
+- ✅ Full reminder (VTODO) support: list, add, complete, delete
+- 🤖 Human-friendly tables **or** `--json` output for scripting
+- 🔐 App-specific-password authentication with clear, actionable errors
+- 🧪 Fully unit-tested without needing a live iCloud connection
 
 ## Requirements
 
-- Python 3.6+
-- `caldav` library
+- Python 3.9+
+- An Apple ID with an **app-specific password** (see below)
 
-## Setup
-
-1. Clone this repository or download the script.
-
-2. Install the required library:
+## Installation
 
 ```bash
-pip install -r requirements.txt
+# From a clone of this repository
+pip install .
+
+# Or, for development (editable install + test tooling)
+pip install -e ".[dev]"
 ```
 
-3. Set up environment variables:
+This installs the `icloud-calendar` command and the `icloud_calendar_manager`
+package.
 
-- On Unix-based systems (Linux, macOS):
+## Authentication
+
+iCloud uses two-factor authentication, so you must use an **app-specific
+password** rather than your primary Apple ID password.
+
+1. Go to <https://appleid.apple.com/> and sign in.
+2. Under **Sign-In and Security → App-Specific Passwords**, click **Generate
+   Password**.
+3. Use the generated value as `APPLE_PASSWORD`.
+
+Provide credentials via environment variables:
 
 ```bash
+# macOS / Linux
 export APPLE_ID='your_apple_id@example.com'
-export APPLE_PASSWORD='your_app_specific_password'
+export APPLE_PASSWORD='your-app-specific-password'
 ```
 
-- On Windows:
+```cmd
+:: Windows (cmd)
+set APPLE_ID=your_apple_id@example.com
+set APPLE_PASSWORD=your-app-specific-password
+```
+
+You can also pass `--apple-id` on the command line; the password is always read
+from `$APPLE_PASSWORD` for safety.
+
+## CLI usage
 
 ```bash
-set APPLE_ID=your_apple_id@example.com
-set APPLE_PASSWORD=your_app_specific_password
+# Verify the connection and summarize the account
+icloud-calendar check
+
+# List calendars and reminder lists
+icloud-calendar calendars list
+icloud-calendar calendars list --no-reminders     # calendars only
+
+# Events
+icloud-calendar events list --calendar "Home" --days 7
+icloud-calendar events list --calendar "Home" --start 2026-06-01 --end 2026-06-30
+icloud-calendar events add --calendar "Home" \
+    --summary "Lunch with Sam" \
+    --start 2026-06-01T12:00 --end 2026-06-01T13:00 \
+    --location "Cafe" --description "Catch up"
+icloud-calendar events update --calendar "Home" --uid <UID> --summary "New title"
+icloud-calendar events delete --calendar "Home" --uid <UID>
+
+# Reminders
+icloud-calendar reminders lists
+icloud-calendar reminders list --list "Reminders"
+icloud-calendar reminders list --list "Reminders" --all      # include completed
+icloud-calendar reminders add --list "Reminders" --summary "Buy milk" --due 2026-06-01
+icloud-calendar reminders done --list "Reminders" --uid <UID>
+icloud-calendar reminders delete --list "Reminders" --uid <UID>
+
+# Machine-readable output (works with any command)
+icloud-calendar --json calendars list
 ```
 
-Note: Replace 'your_apple_id@example.com' with your actual Apple ID, and 'your_app_specific_password' with an app-specific password.
+Dates accept `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM[:SS]`.
 
-4. Creating an App-Specific Password:
+You can also run it as a module: `python -m icloud_calendar_manager ...`.
 
-- Go to https://appleid.apple.com/ and sign in.
-- In the Security section, click "Generate Password" under App-Specific Passwords.
-- Follow the steps to create a password and use this as your APPLE_PASSWORD.
+## Library usage
+
+```python
+import datetime as dt
+from icloud_calendar_manager import CalendarManager
+
+mgr = CalendarManager.from_env()          # reads $APPLE_ID / $APPLE_PASSWORD
+
+for cal in mgr.list_calendars():
+    print(cal.name, "(reminders)" if cal.is_reminder_list else "")
+
+events = mgr.list_events(
+    "Home",
+    dt.datetime.now(),
+    dt.datetime.now() + dt.timedelta(days=7),
+)
+for event in events:
+    print(event.start, event.summary)
+
+event = mgr.add_event(
+    "Home", "Standup",
+    dt.datetime(2026, 6, 1, 9, 0), dt.datetime(2026, 6, 1, 9, 15),
+)
+mgr.complete_reminder("Reminders", "<uid>")
+```
+
+`list_events`, `list_reminders`, etc. return typed dataclasses
+(`EventInfo`, `ReminderInfo`, `CalendarInfo`) with a `.to_dict()` method for
+easy JSON serialization.
+
+### Backwards-compatible functions
+
+Earlier versions of this project exposed module-level functions. These are
+retained and now delegate to `CalendarManager`:
+
+```python
+from icloud_calendar_manager import (
+    list_calendars, get_apple_calendar_events,
+    add_event_to_calendar, update_event_in_calendar, delete_event_from_calendar,
+    list_reminder_lists, get_reminders,
+)
+```
 
 ## Running in GitHub Codespaces
 
-### Using the Terminal
+1. **Fork** this repository and create a **Codespace** from your fork
+   (`Code → Codespaces → New codespace`).
+2. Add your credentials as Codespaces secrets
+   (`Settings → Secrets and variables → Codespaces`): `APPLE_ID` and
+   `APPLE_PASSWORD`. They become environment variables automatically.
+   Alternatively set them in the terminal:
 
-1. **Fork the Repository:**
+   ```bash
+   echo 'export APPLE_ID="your_apple_id@example.com"' >> ~/.bashrc
+   echo 'export APPLE_PASSWORD="your-app-specific-password"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
 
-   - Navigate to the repository on GitHub.
-   - Click the `Fork` button at the top right corner to create your own copy of the repository.
+3. Install and run:
 
-2. **Create a Codespace:**
+   ```bash
+   pip install -e ".[dev]"
+   icloud-calendar check
+   ```
 
-   - Navigate to your forked repository on GitHub.
-   - Click the `Code` button.
-   - Select the `Codespaces` tab.
-   - Click `New codespace` to create a new Codespace.
+## Project layout
 
-3. **Set up Environment Variables:**
-
-   - Once the Codespace is running, open the terminal.
-   - Set up the environment variables:
-
-     ```bash
-     echo 'export APPLE_ID="your_apple_id@example.com"' >> ~/.bashrc
-     echo 'export APPLE_PASSWORD="your_app_specific_password"' >> ~/.bashrc
-     source ~/.bashrc
-     ```
-
-4. **Install Required Libraries:**
-
-   - In the terminal, run:
-
-     ```bash
-     pip install -r requirements.txt
-     ```
-
-5. **Modify the Script:**
-
-   - In the Codespace file explorer, open the script file (`icloud_calendar_manager.py`).
-   - Modify the `calendar_name` variable in the `if __name__ == "__main__":` block to match one of your iCloud calendar names.
-
-6. **Run the Script:**
-
-   - In the terminal, run:
-
-     ```bash
-     python icloud_calendar_manager.py
-     ```
-
-### Using the UI
-
-1. **Fork the Repository:**
-
-   - Navigate to the repository on GitHub.
-   - Click the `Fork` button at the top right corner to create your own copy of the repository.
-
-2. **Create a Codespace:**
-
-   - Navigate to your forked repository on GitHub.
-   - Click the `Code` button.
-   - Select the `Codespaces` tab.
-   - Click `New codespace` to create a new Codespace.
-
-3. **Add Secrets in Repository Settings:**
-
-   - Navigate to your forked repository on GitHub.
-   - Go to `Settings` > `Secrets and variables` > `Codespaces`.
-   - Click `New repository secret`.
-   - Add the following secrets:
-
-     - `APPLE_ID`: your_apple_id@example.com
-     - `APPLE_PASSWORD`: your_app_specific_password
-
-4. **Access Secrets in Codespace:**
-
-   - Once the Codespace is running, the secrets will be available as environment variables.
-
-5. **Install Required Libraries:**
-
-   - Open a terminal in the Codespace.
-   - Run the following command:
-
-     ```bash
-     pip install -r requirements.txt
-     ```
-
-6. **Modify the Script:**
-
-   - In the Codespace file explorer, open the script file (`icloud_calendar_manager.py`).
-   - Modify the `calendar_name` variable in the `if __name__ == "__main__":` block to match one of your iCloud calendar names.
-
-7. **Run the Script:**
-
-   - In the terminal, run:
-
-     ```bash
-     python icloud_calendar_manager.py
-     ```
-
-## Usage
-
-1. Open the script and modify the `calendar_name` variable in the `if __name__ == "__main__":` block to match one of your iCloud calendar names.
-
-2. Run the script:
-
-```bash
-python icloud_calendar_manager.py
+```
+icloud_calendar_manager/
+├── __init__.py     # public API + backwards-compatible helpers
+├── __main__.py     # `python -m icloud_calendar_manager`
+├── cli.py          # argparse command-line interface
+├── client.py       # CalDAV client, auth, endpoint discovery + caching
+├── config.py       # credential resolution
+├── exceptions.py   # typed error hierarchy
+├── manager.py      # CalendarManager: events + reminders operations
+└── models.py       # CalendarInfo / EventInfo / ReminderInfo dataclasses
+tests/              # pytest suite (no network required)
 ```
 
-3. The script will:
+## Development
 
-- List all available calendars
-- Show events for the specified calendar for the next 7 days
-- Add a sample event to the specified calendar
+```bash
+pip install -e ".[dev]"
+pytest                # run the test suite
+flake8 .              # lint
+```
 
-## Functions
+## Notes & security
 
-- `discover_caldav_calendars()`: Lists all available calendars.
-- `get_apple_calendar_events(calendar_name, start_date, end_date)`: Retrieves events for a specific calendar within a date range.
-- `add_event_to_calendar(calendar_name, summary, start_time, end_time)`: Adds a new event to a calendar.
-- `update_event_in_calendar(calendar_name, event_uid, summary, start_time, end_time)`: Updates an existing event.
-- `delete_event_from_calendar(calendar_name, event_uid)`: Deletes an event from a calendar.
-- `list_calendars()`: Returns a list of all calendars.
-
-## Notes
-
-- This script uses the CalDAV protocol to interact with iCloud calendars. Make sure your iCloud account has CalDAV access enabled.
-- Always keep your Apple ID and app-specific password secure. Never share them or commit them to version control.
-- If you encounter authentication issues, ensure you're using an app-specific password and that your Apple ID doesn't have any restrictions preventing third-party access.
+- Uses CalDAV; ensure your iCloud account has CalDAV access enabled.
+- Keep your Apple ID and app-specific password secret — never commit them.
+- The app-specific password can be revoked at any time from your Apple ID
+  account page.
 
 ## Troubleshooting
 
-If you encounter issues:
-
-1. Verify your Apple ID and app-specific password are correct.
-2. Ensure two-factor authentication is properly handled (use an app-specific password).
-3. Check if there are any restrictions on your Apple ID preventing third-party access.
-4. If problems persist, you may need to contact Apple Support for further assistance with accessing CalDAV services for your account.
+- **Authentication errors:** confirm you are using an *app-specific* password,
+  not your Apple ID password, and that two-factor authentication is set up.
+- **Calendar not found:** names are case-sensitive; run
+  `icloud-calendar calendars list` to see exact names.
+- **Connection errors:** check network access to `*.icloud.com` over HTTPS.
+- If problems persist, Apple Support can help with CalDAV access for your
+  account.
