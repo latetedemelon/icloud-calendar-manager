@@ -78,19 +78,19 @@ PROVIDERS: Dict[str, Provider] = {
     ),
     "google": Provider(
         key="google",
-        label="Google Calendar (CalDAV)",
+        label="Google Calendar + Tasks",
         backend=BACKEND_CALDAV,
         auth_scheme=AUTH_BEARER,
         secret_kind=SECRET_OAUTH_TOKEN,
         help_url="https://developers.google.com/calendar/caldav/v2/guide",
         base_url="https://apidata.googleusercontent.com/caldav/v2/",
         requires_username=True,
-        supports_reminders=False,
+        supports_reminders=True,
         experimental=True,
         notes=(
-            "Supply an OAuth2 access token with the calendar scope as the secret "
-            "and your account email as the username. Reminders/Tasks are not "
-            "exposed via Google CalDAV."
+            "Supply an OAuth2 access token (or refresh-token credentials) and "
+            "your account email as the username. Events use CalDAV; reminders "
+            "use the Google Tasks API."
         ),
     ),
     "microsoft": Provider(

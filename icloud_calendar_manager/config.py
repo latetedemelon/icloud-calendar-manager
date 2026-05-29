@@ -158,12 +158,18 @@ def resolve_auth(
     username: Optional[str] = None,
     secret: Optional[str] = None,
     timeout: int = DEFAULT_TIMEOUT,
+    allow_missing_secret: bool = False,
 ) -> AuthConfig:
     """Resolve authentication for ``provider_key`` from arguments then env vars.
 
     Precedence for each field: explicit argument, then the provider-specific
     environment alias, then the generic ``CALENDAR_*`` / ``CALDAV_URL`` vars,
     then the provider's default URL.
+
+    Args:
+        allow_missing_secret: When True, a missing access token/password is not
+            an error (used when an OAuth refresh token will mint the access
+            token instead). The resulting ``AuthConfig.secret`` may be ``""``.
 
     Raises:
         ConfigurationError: if the URL, username, or secret cannot be resolved.
@@ -188,7 +194,7 @@ def resolve_auth(
         missing.append("URL (pass --url; required for the 'generic' provider)")
     if provider.requires_username and not resolved_user:
         missing.append("username (pass --username or set the provider's env var)")
-    if not resolved_secret:
+    if not resolved_secret and not allow_missing_secret:
         kind = "token" if is_bearer else "password"
         missing.append(f"{kind} ({_secret_hint(provider)})")
 
@@ -203,6 +209,6 @@ def resolve_auth(
         provider=provider,
         url=resolved_url,
         username=resolved_user,
-        secret=resolved_secret,
+        secret=resolved_secret or "",
         timeout=timeout,
     )

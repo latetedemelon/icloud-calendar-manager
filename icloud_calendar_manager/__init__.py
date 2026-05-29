@@ -20,7 +20,7 @@ earlier versions of this project and are implemented on top of
 
 from __future__ import annotations
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 import datetime as dt
 from typing import List
@@ -40,6 +40,7 @@ from .exceptions import (
 )
 from .manager import CalendarManager
 from .models import CalendarInfo, EventInfo, ReminderInfo
+from .oauth import OAuthRefreshConfig, TokenProvider, refresh_access_token
 from .providers import PROVIDERS, Provider, get_provider
 
 __all__ = [
@@ -55,6 +56,9 @@ __all__ = [
     "Provider",
     "PROVIDERS",
     "get_provider",
+    "OAuthRefreshConfig",
+    "TokenProvider",
+    "refresh_access_token",
     "ICloudCalendarError",
     "CalendarManagerError",
     "ConfigurationError",

@@ -143,25 +143,40 @@ Implemented the expansion designed in `MULTI_PROVIDER_PLAN.md`. Key decisions:
   (OAuth2 access token) schemes, resolved from explicit args → provider-specific
   env vars → generic `CALENDAR_*` / `CALDAV_URL` vars → provider defaults.
   Secrets are never shown in `repr`.
-- **Google reminders.** Google CalDAV does not expose Tasks/reminders, so the
-  `google` provider is marked `supports_reminders=False` and reminder operations
-  raise `CapabilityError`. ⚑ If you want Google Tasks, that needs the separate
-  Google Tasks REST API (future work).
 - **Microsoft is REST, not CalDAV.** Outlook dropped CalDAV, so `GraphBackend`
   talks to Microsoft Graph over HTTPS. Reminders map to **Microsoft To Do**
   tasks. The HTTP layer is injected (`transport`) so it is fully unit-tested
   with a fake; `requests` is an optional `[graph]` extra (also pulled by
   `caldav`).
-- **OAuth token acquisition is out of scope.** For Google/Microsoft the user
-  supplies a valid access token via `--token` / env var. No interactive consent
-  or refresh flow is implemented. ⚑ Confirm whether you want a token helper.
 - **Experimental labelling.** `google` and `microsoft` are flagged
-  `experimental` (shown by `icloud-calendar providers`): unit-tested with mocks
-  but not validated against live accounts in CI.
+  `experimental` (shown by `providers`): unit-tested with mocks but not
+  validated against live accounts in CI.
 
-⚑ **Naming.** The package import name and the `icloud-calendar` console script
-were **kept** for backward compatibility even though the tool is now
-multi-provider. Options if you'd prefer to rename: add a neutral console-script
-alias (e.g. `caldav-cal` / `calendar-manager`) while keeping `icloud-calendar`,
-or rename the distribution and keep `icloud_calendar_manager` as an import
-shim. Needs a decision.
+## 12. 0.5.0 — resolved the three 0.4.0 review items
+
+All three items you approved are implemented:
+
+- **OAuth token helper (was: out of scope).** `oauth.py` implements the OAuth2
+  *refresh-token grant* with a caching `TokenProvider`. Users supply a refresh
+  token + client id/secret (flags or env) and the tool mints/renews access
+  tokens. A direct `--token` still works. Decision: we implement *refresh* only,
+  not the initial interactive *consent* flow — obtaining the first refresh token
+  is a one-time browser step best done with dedicated tooling, and baking a
+  local web-server/consent flow into a CLI adds significant surface area for
+  little gain. ⚑ Revisit if you want full interactive login.
+- **Google reminders (was: unsupported).** Implemented via the Google Tasks REST
+  API. `GoogleBackend` is a **composite**: events go through CalDAV, reminders
+  through `GoogleTasksBackend`, sharing one OAuth token. `google` now reports
+  `supports_reminders=True`. Decision: compose rather than fold Tasks into the
+  CalDAV backend, keeping each backend single-responsibility and independently
+  testable.
+- **Naming (was: undecided).** Added a provider-neutral **`calendar-manager`**
+  console-script alias while **keeping `icloud-calendar`** and the
+  `icloud_calendar_manager` import name for full backward compatibility. The CLI
+  `prog` is derived from the invoked name, so help text reads correctly under
+  either. Decision: an alias (not a rename) avoids breaking existing users,
+  scripts, and imports. A full distribution rename remains possible later if you
+  want it.
+
+Still open (unchanged): interactive OAuth consent flow; editing single
+occurrences of recurring events; a credentials config-file.

@@ -47,7 +47,8 @@ def test_resolve_google_bearer():
     auth = resolve_auth("google", username="me@gmail.com", secret="ya29.token")
     assert auth.auth_scheme == "bearer"
     assert auth.backend == "caldav"
-    assert auth.provider.supports_reminders is False
+    # Google now supports reminders via the Google Tasks API (composite backend).
+    assert auth.provider.supports_reminders is True
 
 
 def test_resolve_microsoft_bearer_no_username():

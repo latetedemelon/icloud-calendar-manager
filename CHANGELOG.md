@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-05-29
+
+Follow-ups to multi-provider support, addressing the three review items from
+0.4.0.
+
+### Added
+- **OAuth2 refresh-token support** (`oauth.py`): for Google and Microsoft you can
+  now supply a refresh token (`--refresh-token` + `--client-id`
+  [+ `--client-secret`], or env vars) and the tool mints access tokens
+  automatically via the OAuth2 refresh-token grant, caching and renewing them.
+  A directly-supplied `--token` still works. The initial interactive consent
+  flow remains out of scope.
+- **Google Tasks reminders**: the `google` provider now supports reminders via
+  the Google Tasks API. `GoogleBackend` is a composite that routes events to
+  CalDAV and reminders to Google Tasks using the same OAuth token.
+- **`calendar-manager` console-script alias** (provider-neutral) alongside the
+  existing `icloud-calendar`. Both invoke the same CLI; the help/usage adapts to
+  whichever name was used.
+- Shared `BearerTransport` + `json_or_raise` helper (`backends/transport.py`)
+  used by both the Graph and Google Tasks backends.
+- Public exports: `OAuthRefreshConfig`, `TokenProvider`, `refresh_access_token`.
+
+### Changed
+- `google` provider now advertises `supports_reminders=True`.
+- `resolve_auth(..., allow_missing_secret=True)` permits constructing auth when a
+  refresh token (rather than an access token) will be supplied.
+
+### Tests
+- 116 passing (was 93): OAuth refresh/caching, Google Tasks round-trip, the
+  composite Google backend routing, `build_backend` wiring, and the CLI alias /
+  refresh-token flags — all without network access.
+
 ## [0.4.0] - 2026-05-29
 
 Multi-provider support: the tool now manages calendars beyond iCloud.

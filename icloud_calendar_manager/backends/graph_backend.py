@@ -19,17 +19,14 @@ import datetime as dt
 import logging
 from typing import Any, List, Optional
 
-from ..exceptions import (
-    AuthenticationError,
-    CalendarNotFoundError,
-    ICloudCalendarError,
-    ObjectNotFoundError,
-)
-from ..exceptions import ConnectionError as ICloudConnectionError
+from ..exceptions import CalendarNotFoundError, ObjectNotFoundError
 from ..models import CalendarInfo, EventInfo, ReminderInfo
 from .base import CalendarBackend
+from .transport import BearerTransport, json_or_raise
 
 logger = logging.getLogger(__name__)
+
+_SERVICE = "Microsoft Graph"
 
 
 def _graph_datetime(value: dt.datetime | dt.date) -> dict:
@@ -52,29 +49,8 @@ def _priority_to_importance(priority: Optional[int]) -> Optional[str]:
     return "normal"
 
 
-class GraphTransport:
-    """Default HTTP transport wrapping ``requests`` for Microsoft Graph."""
-
-    def __init__(self, token: str, base_url: str, timeout: int, session: Any = None):
-        import requests  # imported lazily so the dependency is optional
-
-        self._token = token
-        self._base = base_url.rstrip("/")
-        self._timeout = timeout
-        self._session = session or requests.Session()
-
-    def request(self, method, path, *, params=None, json=None, headers=None):
-        url = path if path.startswith("http") else f"{self._base}{path}"
-        all_headers = {
-            "Authorization": f"Bearer {self._token}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-        if headers:
-            all_headers.update(headers)
-        return self._session.request(
-            method, url, params=params, json=json, headers=all_headers, timeout=self._timeout
-        )
+class GraphTransport(BearerTransport):
+    """HTTP transport for Microsoft Graph (a thin BearerTransport alias)."""
 
 
 class GraphBackend(CalendarBackend):
@@ -89,24 +65,7 @@ class GraphBackend(CalendarBackend):
 
     def _json(self, method, path, *, params=None, json=None, headers=None, not_found=None):
         resp = self._t.request(method, path, params=params, json=json, headers=headers)
-        code = getattr(resp, "status_code", 0)
-        if code in (401, 403):
-            raise AuthenticationError(
-                "Microsoft Graph rejected the access token. Ensure it is valid and "
-                "has Calendars.ReadWrite / Tasks.ReadWrite scopes."
-            )
-        if code == 404:
-            raise not_found or ICloudCalendarError("Graph resource not found.")
-        if code == 429:
-            raise ICloudConnectionError("Microsoft Graph rate limit hit; retry later.")
-        if not 200 <= code < 300:
-            raise ICloudCalendarError(f"Graph request failed ({code}): {_detail(resp)}")
-        if code == 204:
-            return None
-        try:
-            return resp.json()
-        except ValueError:
-            return None
+        return json_or_raise(resp, service=_SERVICE, not_found=not_found)
 
     def _values(self, path: str) -> List[dict]:
         data = self._json("GET", path) or {}
@@ -256,11 +215,3 @@ def _task_body(summary, due, priority, description) -> dict:
     if importance is not None:
         body["importance"] = importance
     return body
-
-
-def _detail(resp: Any) -> str:
-    try:
-        payload = resp.json()
-        return (payload.get("error") or {}).get("message") or str(payload)
-    except Exception:
-        return getattr(resp, "text", "") or "no detail"

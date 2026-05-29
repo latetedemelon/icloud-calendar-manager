@@ -261,9 +261,9 @@ def _cmd_reminders_delete(args, manager: CalendarManager, stream) -> int:
 # -- parser ------------------------------------------------------------------
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(prog: Optional[str] = None) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="icloud-calendar",
+        prog=prog,
         description=(
             "Manage calendars, events and reminders across providers "
             "(iCloud, Fastmail, Yahoo, Google, Microsoft, generic CalDAV)."
@@ -284,6 +284,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--token", help="OAuth2 access token for bearer providers (Google, Microsoft)."
     )
+    parser.add_argument(
+        "--refresh-token",
+        help="OAuth2 refresh token; exchanged for an access token automatically "
+        "(requires --client-id, and --client-secret for confidential clients).",
+    )
+    parser.add_argument("--client-id", help="OAuth2 client id (for --refresh-token).")
+    parser.add_argument("--client-secret", help="OAuth2 client secret (for --refresh-token).")
     parser.add_argument("--timeout", type=int, default=30, help="Network timeout in seconds.")
     parser.add_argument("--cache", help="Path to cache the discovered CalDAV endpoint.")
 
@@ -416,6 +423,9 @@ def main(
                 secret=args.token,
                 timeout=args.timeout,
                 cache=cache,
+                refresh_token=args.refresh_token,
+                client_id=args.client_id,
+                client_secret=args.client_secret,
             )
         return args.func(args, manager, stream)
     except ConfigurationError as exc:

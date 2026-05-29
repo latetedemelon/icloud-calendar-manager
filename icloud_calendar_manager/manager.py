@@ -19,6 +19,7 @@ from .client import EndpointCache, build_client
 from .config import DEFAULT_TIMEOUT, AuthConfig, Credentials, resolve_auth
 from .exceptions import CapabilityError
 from .models import CalendarInfo, EventInfo, ReminderInfo
+from .oauth import oauth_config_from_env
 from .providers import DEFAULT_PROVIDER
 
 # Re-exported for backwards compatibility (these moved to the CalDAV backend).
@@ -45,6 +46,7 @@ class CalendarManager:
         timeout: int = DEFAULT_TIMEOUT,
         cache: Optional[EndpointCache] = None,
         session: Any = None,
+        oauth: Any = None,
         supports_reminders: bool = True,
     ):
         self._backend = backend
@@ -56,6 +58,7 @@ class CalendarManager:
         self._timeout = timeout
         self._cache = cache
         self._session = session
+        self._oauth = oauth
         self._supports_reminders = supports_reminders
 
     # -- construction helpers ------------------------------------------------
@@ -71,13 +74,40 @@ class CalendarManager:
         timeout: int = DEFAULT_TIMEOUT,
         cache: Optional[EndpointCache] = None,
         session: Any = None,
+        refresh_token: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
     ) -> "CalendarManager":
-        """Build a manager for ``provider``, resolving auth from args/env."""
-        auth = resolve_auth(provider, url=url, username=username, secret=secret, timeout=timeout)
+        """Build a manager for ``provider``, resolving auth from args/env.
+
+        For bearer providers (Google, Microsoft) you may pass either a
+        ready-made access token (``secret``) or OAuth2 refresh-token credentials
+        (``refresh_token`` + ``client_id`` [+ ``client_secret``]), which are
+        exchanged for an access token automatically.
+        """
+        # A refresh token is acceptable in place of an access token; defer the
+        # secret requirement to the OAuth exchange in that case.
+        auth = resolve_auth(
+            provider,
+            url=url,
+            username=username,
+            secret=secret,
+            timeout=timeout,
+            allow_missing_secret=bool(refresh_token),
+        )
+        oauth = None
+        if refresh_token or client_id or client_secret:
+            oauth = oauth_config_from_env(
+                provider,
+                client_id=client_id,
+                client_secret=client_secret,
+                refresh_token=refresh_token,
+            )
         return cls(
             auth=auth,
             cache=cache,
             session=session,
+            oauth=oauth,
             supports_reminders=auth.provider.supports_reminders,
         )
 
@@ -119,7 +149,9 @@ class CalendarManager:
                 principal=self._principal, client=self._client, cache=self._cache
             )
         elif self._auth is not None:
-            self._backend = build_backend(self._auth, cache=self._cache, session=self._session)
+            self._backend = build_backend(
+                self._auth, cache=self._cache, session=self._session, oauth=self._oauth
+            )
         elif self._credentials is not None:
             client = build_client(
                 self._credentials, url=self._url, timeout=self._timeout, cache=self._cache
