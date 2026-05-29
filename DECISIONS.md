@@ -107,14 +107,21 @@ is unchanged.
 
 ## 10. Known limitations / future work
 
-- **Time zones:** datetimes are passed through as given. Naive datetimes become
-  "floating" time in iCalendar. A `--tz` option (or tz-aware defaults) would be
-  a good follow-up.
+Addressed in 0.3.0 (follow-up PR):
+
+- **Time zones** — added `--tz <IANA>` on `events add/update` and
+  `reminders add` to localize naive times; date args also accept UTC offsets.
+  Decision: without `--tz`, times stay "floating" (backward compatible) rather
+  than imposing a possibly-wrong default local zone. ⚑ Confirm this default is
+  what you want.
+- **`reminders get`** — added for symmetry with `events get`.
+- **Live integration test** — added as opt-in/read-only
+  (`tests/test_integration.py`), skipped unless `ICLOUD_INTEGRATION=1` and
+  credentials are present; never mutates the account.
+
+Still open:
+
 - **Recurring events:** listing expands recurrences (`expand=True`), but editing
   a single occurrence of a recurring series isn't specially handled.
-- **No live integration test:** by design, CI never contacts iCloud. A manual or
-  opt-in (credential-gated) integration test could be added.
 - **Config file:** only env vars + CLI flags are supported for credentials; a
   config-file option could be added.
-- **Reminder fetch-by-uid in CLI:** `events get` exists; a `reminders get` could
-  be added for symmetry.

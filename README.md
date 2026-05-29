@@ -83,6 +83,8 @@ icloud-calendar events add --calendar "Home" \
     --summary "Lunch with Sam" \
     --start 2026-06-01T12:00 --end 2026-06-01T13:00 \
     --location "Cafe" --description "Catch up"
+icloud-calendar events add --calendar "Home" --summary "Call" \
+    --start 2026-06-01T09:00 --tz America/New_York   # localize a naive time
 icloud-calendar events update --calendar "Home" --uid <UID> --summary "New title"
 icloud-calendar events delete --calendar "Home" --uid <UID>
 
@@ -90,6 +92,7 @@ icloud-calendar events delete --calendar "Home" --uid <UID>
 icloud-calendar reminders lists
 icloud-calendar reminders list --list "Reminders"
 icloud-calendar reminders list --list "Reminders" --all      # include completed
+icloud-calendar reminders get --list "Reminders" --uid <UID>
 icloud-calendar reminders add --list "Reminders" --summary "Buy milk" --due 2026-06-01
 icloud-calendar reminders done --list "Reminders" --uid <UID>
 icloud-calendar reminders delete --list "Reminders" --uid <UID>
@@ -98,7 +101,10 @@ icloud-calendar reminders delete --list "Reminders" --uid <UID>
 icloud-calendar --json calendars list
 ```
 
-Dates accept `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM[:SS]`.
+Dates accept `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM[:SS]`, optionally with a UTC
+offset (e.g. `2026-06-01T09:00-04:00`). For naive times you can pass `--tz`
+with an IANA name (e.g. `America/New_York`) to localize them; without it, times
+are "floating" (interpreted in the viewing device's timezone).
 
 You can also run it as a module: `python -m icloud_calendar_manager ...`.
 

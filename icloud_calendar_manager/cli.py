@@ -59,6 +59,29 @@ def parse_datetime(value: str) -> dt.datetime:
         ) from exc
 
 
+def _resolve_tz(name: Optional[str]):
+    """Resolve an IANA timezone name to a ``tzinfo``, or ``None`` if unset."""
+    if not name:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo(name)
+    except Exception as exc:  # unknown zone or missing tz database
+        raise ICloudCalendarError(
+            f"Unknown or unavailable timezone {name!r}: {exc}"
+        ) from exc
+
+
+def _localize(value, tzinfo):
+    """Attach ``tzinfo`` to a naive datetime; leave aware/None values unchanged."""
+    if value is None or tzinfo is None:
+        return value
+    if isinstance(value, dt.datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=tzinfo)
+    return value
+
+
 def _print_json(data, stream) -> None:
     json.dump(data, stream, indent=2, default=str)
     stream.write("\n")
@@ -138,11 +161,12 @@ def _cmd_events_get(args, manager: CalendarManager, stream) -> int:
 
 
 def _cmd_events_add(args, manager: CalendarManager, stream) -> int:
+    tzinfo = _resolve_tz(args.tz)
     event = manager.add_event(
         args.calendar,
         args.summary,
-        args.start,
-        args.end,
+        _localize(args.start, tzinfo),
+        _localize(args.end, tzinfo),
         location=args.location,
         description=args.description,
     )
@@ -151,12 +175,13 @@ def _cmd_events_add(args, manager: CalendarManager, stream) -> int:
 
 
 def _cmd_events_update(args, manager: CalendarManager, stream) -> int:
+    tzinfo = _resolve_tz(args.tz)
     event = manager.update_event(
         args.calendar,
         args.uid,
         summary=args.summary,
-        start=args.start,
-        end=args.end,
+        start=_localize(args.start, tzinfo),
+        end=_localize(args.end, tzinfo),
         location=args.location,
         description=args.description,
     )
@@ -184,11 +209,18 @@ def _cmd_reminders_list(args, manager: CalendarManager, stream) -> int:
     return EXIT_OK
 
 
+def _cmd_reminders_get(args, manager: CalendarManager, stream) -> int:
+    reminder = manager.get_reminder(args.list, args.uid)
+    _emit([reminder.to_dict()], ["due", "status", "summary", "uid"], args.json, stream)
+    return EXIT_OK
+
+
 def _cmd_reminders_add(args, manager: CalendarManager, stream) -> int:
+    tzinfo = _resolve_tz(args.tz)
     reminder = manager.add_reminder(
         args.list,
         args.summary,
-        due=args.due,
+        due=_localize(args.due, tzinfo),
         priority=args.priority,
         description=args.description,
     )
@@ -259,6 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
     ev_add.add_argument("--end", type=parse_datetime)
     ev_add.add_argument("--location")
     ev_add.add_argument("--description")
+    ev_add.add_argument("--tz", help="IANA timezone for naive start/end, e.g. America/New_York.")
     ev_add.set_defaults(func=_cmd_events_add)
 
     ev_update = ev_sub.add_parser("update", help="Update an event by UID.")
@@ -269,6 +302,7 @@ def build_parser() -> argparse.ArgumentParser:
     ev_update.add_argument("--end", type=parse_datetime)
     ev_update.add_argument("--location")
     ev_update.add_argument("--description")
+    ev_update.add_argument("--tz", help="IANA timezone for naive start/end, e.g. America/New_York.")
     ev_update.set_defaults(func=_cmd_events_update)
 
     ev_delete = ev_sub.add_parser("delete", help="Delete an event by UID.")
@@ -288,12 +322,18 @@ def build_parser() -> argparse.ArgumentParser:
     rem_list.add_argument("--all", action="store_true", help="Include completed reminders.")
     rem_list.set_defaults(func=_cmd_reminders_list)
 
+    rem_get = rem_sub.add_parser("get", help="Fetch a single reminder by UID.")
+    rem_get.add_argument("--list", required=True)
+    rem_get.add_argument("--uid", required=True)
+    rem_get.set_defaults(func=_cmd_reminders_get)
+
     rem_add = rem_sub.add_parser("add", help="Add a reminder.")
     rem_add.add_argument("--list", required=True)
     rem_add.add_argument("--summary", required=True)
     rem_add.add_argument("--due", type=parse_datetime)
     rem_add.add_argument("--priority", type=int)
     rem_add.add_argument("--description")
+    rem_add.add_argument("--tz", help="IANA timezone for a naive --due, e.g. America/New_York.")
     rem_add.set_defaults(func=_cmd_reminders_add)
 
     rem_done = rem_sub.add_parser("done", help="Mark a reminder complete.")

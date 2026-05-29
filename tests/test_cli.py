@@ -155,3 +155,52 @@ def test_table_output_for_empty_results(manager):
     code, out = run(["events", "list", "--calendar", "Home", "--days", "1"], manager)
     assert code == 0
     assert "(none)" in out
+
+
+def test_events_add_with_timezone(manager):
+    code, out = run(
+        [
+            "--json", "events", "add", "--calendar", "Home", "--summary", "TZ",
+            "--start", "2026-06-01T09:00", "--end", "2026-06-01T10:00",
+            "--tz", "America/New_York",
+        ],
+        manager,
+    )
+    assert code == 0
+    start = json.loads(out)[0]["start"]
+    # ISO string should now carry a UTC offset (e.g. -04:00 in June / DST).
+    assert "-04:00" in start or "-05:00" in start
+
+
+def test_events_add_unknown_timezone_errors(manager):
+    code, _ = run(
+        [
+            "events", "add", "--calendar", "Home", "--summary", "Bad",
+            "--start", "2026-06-01T09:00", "--tz", "Not/AZone",
+        ],
+        manager,
+    )
+    assert code == 1
+
+
+def test_reminders_get(manager):
+    code, out = run(
+        ["--json", "reminders", "add", "--list", "Reminders", "--summary", "G"], manager
+    )
+    uid = json.loads(out)[0]["uid"]
+    code, out = run(
+        ["--json", "reminders", "get", "--list", "Reminders", "--uid", uid], manager
+    )
+    assert code == 0
+    assert json.loads(out)[0]["summary"] == "G"
+
+
+def test_resolve_and_localize_helpers():
+    assert cli._resolve_tz(None) is None
+    tz = cli._resolve_tz("America/New_York")
+    naive = dt.datetime(2026, 6, 1, 9, 0)
+    localized = cli._localize(naive, tz)
+    assert localized.tzinfo is not None
+    # An already-aware datetime is left unchanged.
+    aware = dt.datetime(2026, 6, 1, 9, 0, tzinfo=dt.timezone.utc)
+    assert cli._localize(aware, tz) is aware

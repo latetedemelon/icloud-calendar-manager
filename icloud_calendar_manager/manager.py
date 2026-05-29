@@ -267,6 +267,12 @@ class CalendarManager:
         todos = calendar.todos(include_completed=include_completed)
         return [ReminderInfo.from_caldav_object(obj, list_name) for obj in todos]
 
+    def get_reminder(self, list_name: str, uid: str) -> ReminderInfo:
+        """Fetch a single reminder by UID."""
+        calendar = self._find_calendar(list_name)
+        obj = self._todo_by_uid(calendar, uid)
+        return ReminderInfo.from_caldav_object(obj, list_name)
+
     def add_reminder(
         self,
         list_name: str,
