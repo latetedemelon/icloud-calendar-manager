@@ -29,6 +29,29 @@ def test_parse_datetime_invalid():
         cli.parse_datetime("not-a-date")
 
 
+def test_providers_command_needs_no_credentials(monkeypatch):
+    # 'providers' is static; it must work with no manager and no credentials.
+    monkeypatch.delenv("APPLE_ID", raising=False)
+    monkeypatch.delenv("APPLE_PASSWORD", raising=False)
+    stream = io.StringIO()
+    code = cli.main(["providers"], stream=stream)
+    assert code == 0
+    out = stream.getvalue()
+    assert "icloud" in out and "microsoft" in out and "fastmail" in out
+
+
+def test_providers_command_json(monkeypatch):
+    monkeypatch.delenv("APPLE_ID", raising=False)
+    monkeypatch.delenv("APPLE_PASSWORD", raising=False)
+    stream = io.StringIO()
+    code = cli.main(["--json", "providers"], stream=stream)
+    assert code == 0
+    data = json.loads(stream.getvalue())
+    assert {p["key"] for p in data} == {
+        "icloud", "fastmail", "yahoo", "google", "microsoft", "generic"
+    }
+
+
 def test_check_command(manager):
     code, out = run(["check"], manager)
     assert code == 0

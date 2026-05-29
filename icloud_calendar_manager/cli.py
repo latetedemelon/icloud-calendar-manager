@@ -25,6 +25,7 @@ from . import __version__
 from .client import EndpointCache
 from .exceptions import ConfigurationError, ICloudCalendarError
 from .manager import CalendarManager
+from .providers import DEFAULT_PROVIDER, PROVIDERS
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,23 @@ def _emit(rows, columns, use_json: bool, stream) -> None:
 
 
 # -- command handlers --------------------------------------------------------
+
+
+def _cmd_providers(args, manager, stream) -> int:
+    rows = []
+    for provider in PROVIDERS.values():
+        rows.append(
+            {
+                "key": provider.key,
+                "label": provider.label,
+                "backend": provider.backend,
+                "auth": provider.auth_scheme,
+                "reminders": provider.supports_reminders,
+                "experimental": provider.experimental,
+            }
+        )
+    _emit(rows, ["key", "label", "backend", "auth", "reminders", "experimental"], args.json, stream)
+    return EXIT_OK
 
 
 def _cmd_check(args, manager: CalendarManager, stream) -> int:
@@ -246,12 +264,26 @@ def _cmd_reminders_delete(args, manager: CalendarManager, stream) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="icloud-calendar",
-        description="Manage iCloud calendars, events and reminders over CalDAV.",
+        description=(
+            "Manage calendars, events and reminders across providers "
+            "(iCloud, Fastmail, Yahoo, Google, Microsoft, generic CalDAV)."
+        ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase log verbosity.")
-    parser.add_argument("--apple-id", help="Apple ID (overrides $APPLE_ID).")
+    parser.add_argument(
+        "--provider",
+        default=DEFAULT_PROVIDER,
+        choices=sorted(PROVIDERS),
+        help=f"Calendar provider (default: {DEFAULT_PROVIDER}).",
+    )
+    parser.add_argument("--url", help="Base URL (required for the 'generic' provider).")
+    parser.add_argument("--username", help="Account username/email (overrides env).")
+    parser.add_argument("--apple-id", help="Alias for --username with the iCloud provider.")
+    parser.add_argument(
+        "--token", help="OAuth2 access token for bearer providers (Google, Microsoft)."
+    )
     parser.add_argument("--timeout", type=int, default=30, help="Network timeout in seconds.")
     parser.add_argument("--cache", help="Path to cache the discovered CalDAV endpoint.")
 
@@ -259,6 +291,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("check", help="Verify the connection and summarize the account.").set_defaults(
         func=_cmd_check
+    )
+    sub.add_parser("providers", help="List supported providers.").set_defaults(
+        func=_cmd_providers
     )
 
     # calendars
@@ -371,10 +406,16 @@ def main(
     _configure_logging(args.verbose)
 
     try:
-        if manager is None:
+        # The 'providers' command is static and needs no credentials.
+        if manager is None and args.command != "providers":
             cache = EndpointCache(args.cache) if args.cache else None
-            manager = CalendarManager.from_env(
-                apple_id=args.apple_id, timeout=args.timeout, cache=cache
+            manager = CalendarManager.from_provider(
+                args.provider,
+                url=args.url,
+                username=args.username or args.apple_id,
+                secret=args.token,
+                timeout=args.timeout,
+                cache=cache,
             )
         return args.func(args, manager, stream)
     except ConfigurationError as exc:

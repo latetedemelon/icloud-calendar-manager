@@ -1,117 +1,85 @@
-"""High-level operations against iCloud calendars and reminder lists.
+"""High-level, provider-agnostic calendar operations.
 
-:class:`CalendarManager` is the primary entry point. It accepts an injectable
-``principal`` (or a ``client``) which makes it trivial to unit-test without a
-network connection, while :meth:`CalendarManager.from_credentials` and
-:meth:`CalendarManager.from_env` provide the convenient real-world paths.
+:class:`CalendarManager` is the primary entry point. It delegates the actual
+work to a :class:`~icloud_calendar_manager.backends.base.CalendarBackend`
+(CalDAV for iCloud/Fastmail/Yahoo/Google/generic, or Microsoft Graph for
+Microsoft 365). A backend, ``principal``, ``client``, ``credentials``, or
+``auth`` may be injected, which keeps the class easy to unit-test, while
+:meth:`from_provider`, :meth:`from_env`, and :meth:`from_credentials` provide
+the convenient real-world paths.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-import logging
-import uuid
 from typing import Any, List, Optional
 
-import caldav
-import icalendar
-
-from .client import EndpointCache, build_client, get_principal, partition_base_url
-from .config import DEFAULT_TIMEOUT, Credentials
-from .exceptions import CalendarNotFoundError, ObjectNotFoundError
+from .backends import CalDAVBackend, CalendarBackend, build_backend
+from .client import EndpointCache, build_client
+from .config import DEFAULT_TIMEOUT, AuthConfig, Credentials, resolve_auth
+from .exceptions import CapabilityError
 from .models import CalendarInfo, EventInfo, ReminderInfo
+from .providers import DEFAULT_PROVIDER
 
-logger = logging.getLogger(__name__)
-
-_PRODID = "-//iCloud Calendar Manager//EN//"
-
-
-def _utcnow() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
-
-
-def _build_vevent(
-    summary: str,
-    start: dt.datetime | dt.date,
-    end: Optional[dt.datetime | dt.date],
-    uid: str,
-    location: Optional[str] = None,
-    description: Optional[str] = None,
-) -> bytes:
-    """Render a VEVENT-bearing iCalendar document."""
-    cal = icalendar.Calendar()
-    cal.add("prodid", _PRODID)
-    cal.add("version", "2.0")
-    event = icalendar.Event()
-    event.add("uid", uid)
-    event.add("summary", summary)
-    event.add("dtstamp", _utcnow())
-    event.add("dtstart", start)
-    if end is not None:
-        event.add("dtend", end)
-    if location:
-        event.add("location", location)
-    if description:
-        event.add("description", description)
-    cal.add_component(event)
-    return cal.to_ical()
-
-
-def _build_vtodo(
-    summary: str,
-    uid: str,
-    due: Optional[dt.datetime | dt.date] = None,
-    priority: Optional[int] = None,
-    description: Optional[str] = None,
-) -> bytes:
-    """Render a VTODO-bearing iCalendar document (an iCloud reminder)."""
-    cal = icalendar.Calendar()
-    cal.add("prodid", _PRODID)
-    cal.add("version", "2.0")
-    todo = icalendar.Todo()
-    todo.add("uid", uid)
-    todo.add("summary", summary)
-    todo.add("dtstamp", _utcnow())
-    todo.add("status", "NEEDS-ACTION")
-    if due is not None:
-        todo.add("due", due)
-    if priority is not None:
-        todo.add("priority", priority)
-    if description:
-        todo.add("description", description)
-    cal.add_component(todo)
-    return cal.to_ical()
-
-
-def _replace(component: Any, key: str, value: Any) -> None:
-    """Replace ``key`` on an icalendar component, preserving correct typing."""
-    if value is None:
-        return
-    component.pop(key, None)
-    component.add(key, value)
+# Re-exported for backwards compatibility (these moved to the CalDAV backend).
+from .backends.caldav_backend import (  # noqa: F401  (public re-export)
+    _build_vevent,
+    _build_vtodo,
+    _replace,
+    _utcnow,
+)
 
 
 class CalendarManager:
-    """Manage iCloud calendars, events and reminders over CalDAV."""
+    """Manage calendars, events, and reminders across providers."""
 
     def __init__(
         self,
         *,
+        backend: Optional[CalendarBackend] = None,
         principal: Any = None,
-        client: Optional[caldav.DAVClient] = None,
+        client: Any = None,
         credentials: Optional[Credentials] = None,
+        auth: Optional[AuthConfig] = None,
         url: Optional[str] = None,
         timeout: int = DEFAULT_TIMEOUT,
         cache: Optional[EndpointCache] = None,
+        session: Any = None,
+        supports_reminders: bool = True,
     ):
+        self._backend = backend
         self._principal = principal
         self._client = client
         self._credentials = credentials
+        self._auth = auth
         self._url = url
         self._timeout = timeout
         self._cache = cache
+        self._session = session
+        self._supports_reminders = supports_reminders
 
     # -- construction helpers ------------------------------------------------
+
+    @classmethod
+    def from_provider(
+        cls,
+        provider: str = DEFAULT_PROVIDER,
+        *,
+        url: Optional[str] = None,
+        username: Optional[str] = None,
+        secret: Optional[str] = None,
+        timeout: int = DEFAULT_TIMEOUT,
+        cache: Optional[EndpointCache] = None,
+        session: Any = None,
+    ) -> "CalendarManager":
+        """Build a manager for ``provider``, resolving auth from args/env."""
+        auth = resolve_auth(provider, url=url, username=username, secret=secret, timeout=timeout)
+        return cls(
+            auth=auth,
+            cache=cache,
+            session=session,
+            supports_reminders=auth.provider.supports_reminders,
+        )
 
     @classmethod
     def from_credentials(
@@ -134,53 +102,55 @@ class CalendarManager:
         timeout: int = DEFAULT_TIMEOUT,
         cache: Optional[EndpointCache] = None,
     ) -> "CalendarManager":
-        creds = Credentials.from_env(apple_id, app_password)
-        return cls.from_credentials(creds, url=url, timeout=timeout, cache=cache)
+        """Build an iCloud manager from arguments / ``APPLE_ID`` / ``APPLE_PASSWORD``."""
+        auth = resolve_auth(
+            DEFAULT_PROVIDER, url=url, username=apple_id, secret=app_password, timeout=timeout
+        )
+        return cls(auth=auth, cache=cache, supports_reminders=auth.provider.supports_reminders)
 
-    # -- lazy connection -----------------------------------------------------
+    # -- backend resolution --------------------------------------------------
+
+    @property
+    def backend(self) -> CalendarBackend:
+        if self._backend is not None:
+            return self._backend
+        if self._principal is not None or self._client is not None:
+            self._backend = CalDAVBackend(
+                principal=self._principal, client=self._client, cache=self._cache
+            )
+        elif self._auth is not None:
+            self._backend = build_backend(self._auth, cache=self._cache, session=self._session)
+        elif self._credentials is not None:
+            client = build_client(
+                self._credentials, url=self._url, timeout=self._timeout, cache=self._cache
+            )
+            self._backend = CalDAVBackend(client=client, cache=self._cache)
+        else:
+            raise ValueError(
+                "CalendarManager needs a backend, principal, client, credentials, or auth."
+            )
+        return self._backend
 
     @property
     def principal(self):
-        """Resolve (and memoize) the CalDAV principal."""
-        if self._principal is not None:
-            return self._principal
-        if self._client is None:
-            if self._credentials is None:
-                raise ValueError(
-                    "CalendarManager needs a principal, client, or credentials."
-                )
-            self._client = build_client(
-                self._credentials,
-                url=self._url,
-                timeout=self._timeout,
-                cache=self._cache,
-            )
-        self._principal = get_principal(self._client)
-        # Opportunistically cache the resolved partition URL for next time.
-        if self._cache is not None:
-            base = partition_base_url(self._principal)
-            if base:
-                self._cache.save(base)
-        return self._principal
+        """The CalDAV principal (only available for CalDAV providers)."""
+        backend = self.backend
+        if isinstance(backend, CalDAVBackend):
+            return backend.principal
+        raise AttributeError("principal is only available for CalDAV-based providers.")
 
     # -- calendars -----------------------------------------------------------
 
     def list_calendars(self, include_reminder_lists: bool = True) -> List[CalendarInfo]:
         """List calendars (and, by default, reminder lists)."""
-        infos = [CalendarInfo.from_calendar(c) for c in self.principal.calendars()]
+        infos = self.backend.list_calendars()
         if include_reminder_lists:
             return infos
         return [c for c in infos if not c.is_reminder_list]
 
     def list_reminder_lists(self) -> List[CalendarInfo]:
-        """List only the collections that hold reminders (VTODO)."""
-        return [c for c in self.list_calendars() if c.is_reminder_list]
-
-    def _find_calendar(self, name: str):
-        for calendar in self.principal.calendars():
-            if calendar.name == name:
-                return calendar
-        raise CalendarNotFoundError(name)
+        """List only the collections that hold reminders."""
+        return [c for c in self.backend.list_calendars() if c.is_reminder_list]
 
     # -- events --------------------------------------------------------------
 
@@ -193,9 +163,11 @@ class CalendarManager:
         expand: bool = True,
     ) -> List[EventInfo]:
         """Return events in ``calendar_name`` between ``start`` and ``end``."""
-        calendar = self._find_calendar(calendar_name)
-        results = calendar.search(start=start, end=end, event=True, expand=expand)
-        return [EventInfo.from_caldav_object(obj, calendar_name) for obj in results]
+        return self.backend.list_events(calendar_name, start, end, expand=expand)
+
+    def get_event(self, calendar_name: str, uid: str) -> EventInfo:
+        """Fetch a single event by UID."""
+        return self.backend.get_event(calendar_name, uid)
 
     def add_event(
         self,
@@ -209,18 +181,10 @@ class CalendarManager:
         uid: Optional[str] = None,
     ) -> EventInfo:
         """Create an event and return its parsed representation."""
-        calendar = self._find_calendar(calendar_name)
-        uid = uid or str(uuid.uuid4())
-        ical = _build_vevent(summary, start, end, uid, location, description)
-        obj = calendar.save_event(ical=ical)
-        logger.info("Created event %r (uid=%s) in %r", summary, uid, calendar_name)
-        return EventInfo.from_caldav_object(obj, calendar_name)
-
-    def get_event(self, calendar_name: str, uid: str) -> EventInfo:
-        """Fetch a single event by UID."""
-        calendar = self._find_calendar(calendar_name)
-        obj = self._event_by_uid(calendar, uid)
-        return EventInfo.from_caldav_object(obj, calendar_name)
+        return self.backend.add_event(
+            calendar_name, summary, start, end,
+            location=location, description=description, uid=uid,
+        )
 
     def update_event(
         self,
@@ -234,44 +198,34 @@ class CalendarManager:
         description: Optional[str] = None,
     ) -> EventInfo:
         """Update fields of an existing event. Only provided fields change."""
-        calendar = self._find_calendar(calendar_name)
-        obj = self._event_by_uid(calendar, uid)
-        component = obj.icalendar_component
-        _replace(component, "summary", summary)
-        _replace(component, "dtstart", start)
-        _replace(component, "dtend", end)
-        _replace(component, "location", location)
-        _replace(component, "description", description)
-        _replace(component, "last-modified", _utcnow())
-        obj.save()
-        logger.info("Updated event uid=%s in %r", uid, calendar_name)
-        return EventInfo.from_caldav_object(obj, calendar_name)
+        return self.backend.update_event(
+            calendar_name, uid, summary=summary, start=start, end=end,
+            location=location, description=description,
+        )
 
     def delete_event(self, calendar_name: str, uid: str) -> None:
         """Delete an event by UID."""
-        calendar = self._find_calendar(calendar_name)
-        obj = self._event_by_uid(calendar, uid)
-        obj.delete()
-        logger.info("Deleted event uid=%s from %r", uid, calendar_name)
+        self.backend.delete_event(calendar_name, uid)
 
-    # -- reminders (VTODO) ---------------------------------------------------
+    # -- reminders -----------------------------------------------------------
+
+    def _require_reminders(self) -> None:
+        if not self._supports_reminders:
+            raise CapabilityError(
+                "This provider does not support reminders/tasks via this tool."
+            )
 
     def list_reminders(
-        self,
-        list_name: str,
-        *,
-        include_completed: bool = False,
+        self, list_name: str, *, include_completed: bool = False
     ) -> List[ReminderInfo]:
         """Return reminders from ``list_name``."""
-        calendar = self._find_calendar(list_name)
-        todos = calendar.todos(include_completed=include_completed)
-        return [ReminderInfo.from_caldav_object(obj, list_name) for obj in todos]
+        self._require_reminders()
+        return self.backend.list_reminders(list_name, include_completed=include_completed)
 
     def get_reminder(self, list_name: str, uid: str) -> ReminderInfo:
         """Fetch a single reminder by UID."""
-        calendar = self._find_calendar(list_name)
-        obj = self._todo_by_uid(calendar, uid)
-        return ReminderInfo.from_caldav_object(obj, list_name)
+        self._require_reminders()
+        return self.backend.get_reminder(list_name, uid)
 
     def add_reminder(
         self,
@@ -283,33 +237,21 @@ class CalendarManager:
         description: Optional[str] = None,
         uid: Optional[str] = None,
     ) -> ReminderInfo:
-        """Create a reminder (VTODO) and return its parsed representation."""
-        calendar = self._find_calendar(list_name)
-        uid = uid or str(uuid.uuid4())
-        ical = _build_vtodo(summary, uid, due, priority, description)
-        obj = calendar.save_todo(ical=ical)
-        logger.info("Created reminder %r (uid=%s) in %r", summary, uid, list_name)
-        return ReminderInfo.from_caldav_object(obj, list_name)
+        """Create a reminder and return its parsed representation."""
+        self._require_reminders()
+        return self.backend.add_reminder(
+            list_name, summary, due=due, priority=priority, description=description, uid=uid
+        )
 
     def complete_reminder(self, list_name: str, uid: str) -> ReminderInfo:
-        """Mark a reminder complete (STATUS=COMPLETED, 100%)."""
-        calendar = self._find_calendar(list_name)
-        obj = self._todo_by_uid(calendar, uid)
-        component = obj.icalendar_component
-        _replace(component, "status", "COMPLETED")
-        _replace(component, "percent-complete", 100)
-        _replace(component, "completed", _utcnow())
-        _replace(component, "last-modified", _utcnow())
-        obj.save()
-        logger.info("Completed reminder uid=%s in %r", uid, list_name)
-        return ReminderInfo.from_caldav_object(obj, list_name)
+        """Mark a reminder complete."""
+        self._require_reminders()
+        return self.backend.complete_reminder(list_name, uid)
 
     def delete_reminder(self, list_name: str, uid: str) -> None:
         """Delete a reminder by UID."""
-        calendar = self._find_calendar(list_name)
-        obj = self._todo_by_uid(calendar, uid)
-        obj.delete()
-        logger.info("Deleted reminder uid=%s from %r", uid, list_name)
+        self._require_reminders()
+        self.backend.delete_reminder(list_name, uid)
 
     # -- diagnostics ---------------------------------------------------------
 
@@ -318,23 +260,7 @@ class CalendarManager:
         calendars = self.list_calendars()
         reminder_lists = [c for c in calendars if c.is_reminder_list]
         return {
-            "principal_url": str(self.principal.url),
+            "principal_url": self.backend.account_identifier(),
             "calendars": len(calendars) - len(reminder_lists),
             "reminder_lists": len(reminder_lists),
         }
-
-    # -- internal lookups ----------------------------------------------------
-
-    @staticmethod
-    def _event_by_uid(calendar, uid: str):
-        try:
-            return calendar.event_by_uid(uid)
-        except caldav.lib.error.NotFoundError as exc:
-            raise ObjectNotFoundError(uid) from exc
-
-    @staticmethod
-    def _todo_by_uid(calendar, uid: str):
-        try:
-            return calendar.todo_by_uid(uid)
-        except caldav.lib.error.NotFoundError as exc:
-            raise ObjectNotFoundError(uid) from exc

@@ -1,55 +1,69 @@
-"""iCloud Calendar Manager.
+"""Calendar Manager.
 
-A small, tested toolkit and CLI for managing iCloud calendars, events and
-reminders over CalDAV.
+A small, tested toolkit and CLI for managing calendars, events and reminders
+across multiple providers: Apple iCloud, Fastmail, Yahoo, and generic CalDAV
+servers; Google Calendar (CalDAV via OAuth); and Microsoft 365 / Outlook
+(Microsoft Graph).
 
 High-level usage::
 
     from icloud_calendar_manager import CalendarManager
-    mgr = CalendarManager.from_env()
+    mgr = CalendarManager.from_env()                 # iCloud (default)
+    mgr = CalendarManager.from_provider("fastmail")  # another provider
     for cal in mgr.list_calendars():
         print(cal.name)
 
 The module-level functions below are retained for backwards compatibility with
 earlier versions of this project and are implemented on top of
-:class:`CalendarManager`.
+:class:`CalendarManager` (iCloud by default).
 """
 
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 import datetime as dt
 from typing import List
 
 import caldav
 
-from .client import EndpointCache, build_client
-from .config import DEFAULT_CALDAV_URL, Credentials
+from .client import EndpointCache, build_caldav_client, build_client
+from .config import DEFAULT_CALDAV_URL, AuthConfig, Credentials, resolve_auth
 from .exceptions import (
     AuthenticationError,
+    CalendarManagerError,
     CalendarNotFoundError,
+    CapabilityError,
     ConfigurationError,
     ICloudCalendarError,
     ObjectNotFoundError,
 )
 from .manager import CalendarManager
 from .models import CalendarInfo, EventInfo, ReminderInfo
+from .providers import PROVIDERS, Provider, get_provider
 
 __all__ = [
     "__version__",
     "CalendarManager",
     "Credentials",
+    "AuthConfig",
+    "resolve_auth",
     "EndpointCache",
     "CalendarInfo",
     "EventInfo",
     "ReminderInfo",
+    "Provider",
+    "PROVIDERS",
+    "get_provider",
     "ICloudCalendarError",
+    "CalendarManagerError",
     "ConfigurationError",
     "AuthenticationError",
     "CalendarNotFoundError",
     "ObjectNotFoundError",
+    "CapabilityError",
     "DEFAULT_CALDAV_URL",
+    "build_caldav_client",
     # Backwards-compatible helpers:
     "get_caldav_client",
     "find_calendar",

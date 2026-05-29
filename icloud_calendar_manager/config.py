@@ -17,6 +17,14 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .exceptions import ConfigurationError
+from .providers import (
+    AUTH_BEARER,
+    DEFAULT_PROVIDER,
+    SECRET_APP_PASSWORD,
+    SECRET_OAUTH_TOKEN,
+    Provider,
+    get_provider,
+)
 
 # Base CalDAV endpoint. iCloud redirects this to the account's "partition"
 # host (e.g. ``p123-caldav.icloud.com``) during principal discovery, so the
@@ -28,6 +36,23 @@ DEFAULT_TIMEOUT = 30
 
 ENV_APPLE_ID = "APPLE_ID"
 ENV_APPLE_PASSWORD = "APPLE_PASSWORD"  # noqa: S105 - name of an env var, not a secret
+
+# Generic, provider-agnostic environment variables.
+ENV_PROVIDER = "CALENDAR_PROVIDER"
+ENV_URL = "CALDAV_URL"
+ENV_USERNAME = "CALENDAR_USERNAME"
+ENV_PASSWORD = "CALENDAR_PASSWORD"  # noqa: S105 - env var name
+ENV_TOKEN = "CALENDAR_TOKEN"  # noqa: S105 - env var name
+
+# Per-provider environment aliases (username, secret) checked before the
+# generic variables above. Lets each service keep its conventional names.
+_PROVIDER_ENV = {
+    "icloud": (ENV_APPLE_ID, ENV_APPLE_PASSWORD),
+    "fastmail": ("FASTMAIL_USERNAME", "FASTMAIL_PASSWORD"),
+    "yahoo": ("YAHOO_USERNAME", "YAHOO_PASSWORD"),
+    "google": ("GOOGLE_EMAIL", "GOOGLE_CALENDAR_TOKEN"),
+    "microsoft": (None, "MICROSOFT_TOKEN"),
+}
 
 
 @dataclass(frozen=True)
@@ -77,3 +102,107 @@ class Credentials:
     def __repr__(self) -> str:  # pragma: no cover - trivial
         # Never leak the password in logs or tracebacks.
         return f"Credentials(apple_id={self.apple_id!r}, app_password='***')"
+
+
+@dataclass(frozen=True)
+class AuthConfig:
+    """Resolved authentication for any provider.
+
+    ``secret`` holds a password (for Basic auth) or a bearer token (for OAuth
+    providers). Use :func:`resolve_auth` to build one with validation.
+    """
+
+    provider: Provider
+    url: Optional[str]
+    username: Optional[str]
+    secret: str
+    timeout: int = DEFAULT_TIMEOUT
+
+    @property
+    def auth_scheme(self) -> str:
+        return self.provider.auth_scheme
+
+    @property
+    def backend(self) -> str:
+        return self.provider.backend
+
+    def __repr__(self) -> str:  # pragma: no cover - trivial
+        return (
+            "AuthConfig(provider={!r}, url={!r}, username={!r}, secret='***')".format(
+                self.provider.key, self.url, self.username
+            )
+        )
+
+
+def _first_env(*names: Optional[str]) -> Optional[str]:
+    for name in names:
+        if name:
+            value = os.getenv(name)
+            if value:
+                return value
+    return None
+
+
+def _secret_hint(provider: Provider) -> str:
+    if provider.secret_kind == SECRET_APP_PASSWORD:
+        return f"an app-specific password (see {provider.help_url})"
+    if provider.secret_kind == SECRET_OAUTH_TOKEN:
+        return f"an OAuth2 access token (see {provider.help_url})"
+    return "the account password"
+
+
+def resolve_auth(
+    provider_key: str = DEFAULT_PROVIDER,
+    *,
+    url: Optional[str] = None,
+    username: Optional[str] = None,
+    secret: Optional[str] = None,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> AuthConfig:
+    """Resolve authentication for ``provider_key`` from arguments then env vars.
+
+    Precedence for each field: explicit argument, then the provider-specific
+    environment alias, then the generic ``CALENDAR_*`` / ``CALDAV_URL`` vars,
+    then the provider's default URL.
+
+    Raises:
+        ConfigurationError: if the URL, username, or secret cannot be resolved.
+    """
+    try:
+        provider = get_provider(provider_key)
+    except KeyError as exc:
+        raise ConfigurationError(str(exc)) from exc
+
+    env_user, env_secret = _PROVIDER_ENV.get(provider.key, (None, None))
+    is_bearer = provider.auth_scheme == AUTH_BEARER
+
+    resolved_url = url or os.getenv(ENV_URL) or provider.base_url
+    resolved_user = username or _first_env(env_user, ENV_USERNAME)
+    if is_bearer:
+        resolved_secret = secret or _first_env(env_secret, ENV_TOKEN)
+    else:
+        resolved_secret = secret or _first_env(env_secret, ENV_PASSWORD)
+
+    missing = []
+    if not resolved_url:
+        missing.append("URL (pass --url; required for the 'generic' provider)")
+    if provider.requires_username and not resolved_user:
+        missing.append("username (pass --username or set the provider's env var)")
+    if not resolved_secret:
+        kind = "token" if is_bearer else "password"
+        missing.append(f"{kind} ({_secret_hint(provider)})")
+
+    if missing:
+        raise ConfigurationError(
+            f"Cannot authenticate to {provider.label}. Missing: "
+            + "; ".join(missing)
+            + "."
+        )
+
+    return AuthConfig(
+        provider=provider,
+        url=resolved_url,
+        username=resolved_user,
+        secret=resolved_secret,
+        timeout=timeout,
+    )

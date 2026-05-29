@@ -121,10 +121,47 @@ Addressed in 0.3.0 (follow-up PR):
 
 Still open:
 
-- **Multi-provider support:** expanding beyond iCloud (Fastmail, Yahoo, generic
-  CalDAV, Google via OAuth, Microsoft via Graph) is designed but **not
-  implemented**. See [`MULTI_PROVIDER_PLAN.md`](MULTI_PROVIDER_PLAN.md).
 - **Recurring events:** listing expands recurrences (`expand=True`), but editing
   a single occurrence of a recurring series isn't specially handled.
 - **Config file:** only env vars + CLI flags are supported for credentials; a
   config-file option could be added.
+
+## 11. Multi-provider support (0.4.0)
+
+Implemented the expansion designed in `MULTI_PROVIDER_PLAN.md`. Key decisions:
+
+- **Backend abstraction.** Introduced a `CalendarBackend` interface with two
+  implementations: `CalDAVBackend` (iCloud, Fastmail, Yahoo, Google, generic)
+  and `GraphBackend` (Microsoft 365 via Microsoft Graph REST). `CalendarManager`
+  became a thin provider-agnostic facade delegating to a backend. This keeps the
+  CLI and the public API identical across providers.
+- **Backward compatibility preserved.** Default provider is `icloud`;
+  `from_env`, `from_credentials`, the `principal=`/`client=` injection used by
+  tests, and all module-level helper functions still work. The original 64 tests
+  pass unchanged; total is now 93.
+- **Auth.** `resolve_auth` supports Basic (username + app password) and Bearer
+  (OAuth2 access token) schemes, resolved from explicit args → provider-specific
+  env vars → generic `CALENDAR_*` / `CALDAV_URL` vars → provider defaults.
+  Secrets are never shown in `repr`.
+- **Google reminders.** Google CalDAV does not expose Tasks/reminders, so the
+  `google` provider is marked `supports_reminders=False` and reminder operations
+  raise `CapabilityError`. ⚑ If you want Google Tasks, that needs the separate
+  Google Tasks REST API (future work).
+- **Microsoft is REST, not CalDAV.** Outlook dropped CalDAV, so `GraphBackend`
+  talks to Microsoft Graph over HTTPS. Reminders map to **Microsoft To Do**
+  tasks. The HTTP layer is injected (`transport`) so it is fully unit-tested
+  with a fake; `requests` is an optional `[graph]` extra (also pulled by
+  `caldav`).
+- **OAuth token acquisition is out of scope.** For Google/Microsoft the user
+  supplies a valid access token via `--token` / env var. No interactive consent
+  or refresh flow is implemented. ⚑ Confirm whether you want a token helper.
+- **Experimental labelling.** `google` and `microsoft` are flagged
+  `experimental` (shown by `icloud-calendar providers`): unit-tested with mocks
+  but not validated against live accounts in CI.
+
+⚑ **Naming.** The package import name and the `icloud-calendar` console script
+were **kept** for backward compatibility even though the tool is now
+multi-provider. Options if you'd prefer to rename: add a neutral console-script
+alias (e.g. `caldav-cal` / `calendar-manager`) while keeping `icloud-calendar`,
+or rename the distribution and keep `icloud_calendar_manager` as an import
+shim. Needs a decision.

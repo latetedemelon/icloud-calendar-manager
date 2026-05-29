@@ -3,6 +3,42 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-05-29
+
+Multi-provider support: the tool now manages calendars beyond iCloud.
+
+### Added
+- **Provider support** for Fastmail, Yahoo, generic CalDAV (`--url`), Google
+  Calendar (CalDAV over an OAuth2 bearer token), and Microsoft 365 / Outlook
+  (via the Microsoft Graph REST API). Select with `--provider` (default
+  `icloud`).
+- **`providers` CLI command** listing the supported providers (no credentials
+  required), with `--json` support.
+- **Backend abstraction** (`backends/`): a `CalendarBackend` interface with a
+  `CalDAVBackend` (all CalDAV providers) and a `GraphBackend` (Microsoft Graph).
+- **Provider registry** (`providers.py`) and a generalized `AuthConfig` /
+  `resolve_auth` in `config.py` supporting Basic and Bearer authentication,
+  with provider-specific and generic environment variables.
+- `CalendarManager.from_provider(...)`; bearer-token CalDAV client builder
+  `build_caldav_client(...)`; `EventInfo.from_graph` / `ReminderInfo.from_graph`
+  parsers; `CapabilityError` for unsupported operations.
+- New unit tests (93 passing total) including a full Microsoft Graph round-trip
+  exercised through an in-memory fake transport (no network).
+
+### Changed
+- `CalendarManager` is now a thin, provider-agnostic facade that delegates to a
+  backend. iCloud remains the default and **all existing CLI commands, library
+  calls, and backwards-compatible helpers are unchanged.**
+- Reminders are gated by provider capability (e.g. Google CalDAV exposes no
+  reminders, so those operations raise `CapabilityError`).
+
+### Notes
+- Google and Microsoft are **experimental**: unit-tested with mocks, but they
+  require a caller-supplied OAuth2 access token and have not been validated
+  against live accounts in CI. Token acquisition/refresh is out of scope.
+- The distribution/command name remains `icloud-calendar` for compatibility
+  despite the broader scope. A rename is tracked in `DECISIONS.md`.
+
 ## [0.3.0] - 2026-05-29
 
 Follow-up improvements after the 0.2.0 consolidation.
