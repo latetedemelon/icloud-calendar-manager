@@ -33,6 +33,18 @@ def test_complete_reminder_hides_from_default_list(manager):
     assert [r.summary for r in all_reminders] == ["Submit report"]
 
 
+def test_get_reminder(manager):
+    created = manager.add_reminder("Reminders", "Findable")
+    fetched = manager.get_reminder("Reminders", created.uid)
+    assert fetched.summary == "Findable"
+    assert fetched.uid == created.uid
+
+
+def test_get_missing_reminder_raises(manager):
+    with pytest.raises(ObjectNotFoundError):
+        manager.get_reminder("Reminders", "nope")
+
+
 def test_delete_reminder(manager):
     created = manager.add_reminder("Reminders", "Temporary")
     manager.delete_reminder("Reminders", created.uid)

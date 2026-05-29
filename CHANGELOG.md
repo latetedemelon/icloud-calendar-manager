@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-05-29
+
+Follow-up improvements after the 0.2.0 consolidation.
+
+### Added
+- **Timezone support:** `--tz <IANA name>` on `events add`, `events update`, and
+  `reminders add` localizes naive start/end/due times (e.g. `America/New_York`).
+  Date arguments also accept UTC offsets directly (e.g. `...T09:00-04:00`).
+- **`reminders get --list --uid`** (and `CalendarManager.get_reminder`) for
+  symmetry with `events get`.
+- **Opt-in, read-only integration test** (`tests/test_integration.py`), skipped
+  unless `ICLOUD_INTEGRATION=1` and credentials are set; it never mutates the
+  account.
+- `tzdata` added to the `dev` extras so `zoneinfo` works deterministically
+  across platforms.
+
+### Notes
+- Without `--tz`, naive times remain "floating" (unchanged behavior).
+
 ## [0.2.0] - 2026-05-29
 
 This release consolidates all outstanding branches (`patch-1`, `Reminders`) and
