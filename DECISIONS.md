@@ -121,6 +121,9 @@ Addressed in 0.3.0 (follow-up PR):
 
 Still open:
 
+- **Multi-provider support:** expanding beyond iCloud (Fastmail, Yahoo, generic
+  CalDAV, Google via OAuth, Microsoft via Graph) is designed but **not
+  implemented**. See [`MULTI_PROVIDER_PLAN.md`](MULTI_PROVIDER_PLAN.md).
 - **Recurring events:** listing expands recurrences (`expand=True`), but editing
   a single occurrence of a recurring series isn't specially handled.
 - **Config file:** only env vars + CLI flags are supported for credentials; a
