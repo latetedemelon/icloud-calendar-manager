@@ -121,10 +121,92 @@ Addressed in 0.3.0 (follow-up PR):
 
 Still open:
 
-- **Multi-provider support:** expanding beyond iCloud (Fastmail, Yahoo, generic
-  CalDAV, Google via OAuth, Microsoft via Graph) is designed but **not
-  implemented**. See [`MULTI_PROVIDER_PLAN.md`](MULTI_PROVIDER_PLAN.md).
 - **Recurring events:** listing expands recurrences (`expand=True`), but editing
   a single occurrence of a recurring series isn't specially handled.
 - **Config file:** only env vars + CLI flags are supported for credentials; a
   config-file option could be added.
+
+## 11. Multi-provider support (0.4.0)
+
+Implemented the expansion designed in `MULTI_PROVIDER_PLAN.md`. Key decisions:
+
+- **Backend abstraction.** Introduced a `CalendarBackend` interface with two
+  implementations: `CalDAVBackend` (iCloud, Fastmail, Yahoo, Google, generic)
+  and `GraphBackend` (Microsoft 365 via Microsoft Graph REST). `CalendarManager`
+  became a thin provider-agnostic facade delegating to a backend. This keeps the
+  CLI and the public API identical across providers.
+- **Backward compatibility preserved.** Default provider is `icloud`;
+  `from_env`, `from_credentials`, the `principal=`/`client=` injection used by
+  tests, and all module-level helper functions still work. The original 64 tests
+  pass unchanged; total is now 93.
+- **Auth.** `resolve_auth` supports Basic (username + app password) and Bearer
+  (OAuth2 access token) schemes, resolved from explicit args → provider-specific
+  env vars → generic `CALENDAR_*` / `CALDAV_URL` vars → provider defaults.
+  Secrets are never shown in `repr`.
+- **Microsoft is REST, not CalDAV.** Outlook dropped CalDAV, so `GraphBackend`
+  talks to Microsoft Graph over HTTPS. Reminders map to **Microsoft To Do**
+  tasks. The HTTP layer is injected (`transport`) so it is fully unit-tested
+  with a fake; `requests` is an optional `[graph]` extra (also pulled by
+  `caldav`).
+- **Experimental labelling.** `google` and `microsoft` are flagged
+  `experimental` (shown by `providers`): unit-tested with mocks but not
+  validated against live accounts in CI.
+
+## 12. 0.5.0 — resolved the three 0.4.0 review items
+
+All three items you approved are implemented:
+
+- **OAuth token helper (was: out of scope).** `oauth.py` implements the OAuth2
+  *refresh-token grant* with a caching `TokenProvider`. Users supply a refresh
+  token + client id/secret (flags or env) and the tool mints/renews access
+  tokens. A direct `--token` still works. Decision: we implement *refresh* only,
+  not the initial interactive *consent* flow — obtaining the first refresh token
+  is a one-time browser step best done with dedicated tooling, and baking a
+  local web-server/consent flow into a CLI adds significant surface area for
+  little gain. ⚑ Revisit if you want full interactive login.
+- **Google reminders (was: unsupported).** Implemented via the Google Tasks REST
+  API. `GoogleBackend` is a **composite**: events go through CalDAV, reminders
+  through `GoogleTasksBackend`, sharing one OAuth token. `google` now reports
+  `supports_reminders=True`. Decision: compose rather than fold Tasks into the
+  CalDAV backend, keeping each backend single-responsibility and independently
+  testable.
+- **Naming (was: undecided).** Added a provider-neutral **`calendar-manager`**
+  console-script alias while **keeping `icloud-calendar`** and the
+  `icloud_calendar_manager` import name for full backward compatibility. The CLI
+  `prog` is derived from the invoked name, so help text reads correctly under
+  either. Decision: an alias (not a rename) avoids breaking existing users,
+  scripts, and imports. A full distribution rename remains possible later if you
+  want it.
+
+Still open (unchanged): interactive OAuth consent flow; editing single
+occurrences of recurring events; a credentials config-file.
+
+## 13. 0.6.0 — self-hosted CalDAV presets, capability gating, Obsidian
+
+Scope was chosen with the user: **CalDAV presets + discovery now; no CardDAV;
+investigate (not build) an Obsidian bridge.**
+
+- **Presets over new protocols.** Every RFC-4791 server already worked through
+  `generic --url`. Rather than add protocols, 0.6.0 adds *named presets*
+  (Nextcloud, ownCloud, Radicale, Baïkal, SOGo, DAViCal, Zimbra, Synology,
+  Vikunja; plus hosted Posteo/mailbox.org/GMX) that supply the right DAV path
+  and accurate capability flags. Decision: presets are data in the registry, so
+  adding more is a one-entry change, and `generic` remains the catch-all.
+- **URL resolution is a pure function** (`resolve_provider_url`) that appends a
+  provider's `path_suffix` to a bare host and is idempotent. Kept pure so it is
+  unit-tested without a network. Trailing-slash normalization is intentional and
+  harmless for CalDAV.
+- **Events capability gate.** Added `supports_events` to mirror
+  `supports_reminders`, so tasks-only servers (**Vikunja**) reject event
+  operations with `CapabilityError` instead of confusing server errors.
+- **CardDAV / contacts: deliberately excluded.** The user chose calendars-only
+  for now. Contacts would be a new domain (address books, vCards) and overlaps a
+  separate private contact-merge client; revisit if those should converge.
+- **Obsidian: not a provider.** It is not a CalDAV/CardDAV server, so it cannot
+  be added to the registry. Per the user's choice, `OBSIDIAN.md` records an
+  investigation of a one-directional Markdown/ICS **export bridge** as a possible
+  future, separate feature; nothing was implemented.
+- **`.well-known` discovery.** A `well_known_url` helper and provider flag are in
+  place; the `caldav` library already follows the server's redirects during
+  principal discovery, so this is a thin, mostly-future-proofing addition rather
+  than a custom discovery client.

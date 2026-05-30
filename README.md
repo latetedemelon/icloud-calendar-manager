@@ -1,7 +1,8 @@
-# iCloud Calendar Manager
+# Calendar Manager (iCloud, Google, Microsoft, Fastmail & more)
 
-A small, tested Python toolkit and command-line interface for managing **iCloud
-calendars, events, and reminders** over the CalDAV protocol.
+A small, tested Python toolkit and command-line interface for managing
+**calendars, events, and reminders** across multiple providers — over CalDAV
+and Microsoft Graph.
 
 It can be used three ways:
 
@@ -10,20 +11,64 @@ It can be used three ways:
 - **Backwards-compatible helpers** — the original module-level functions
   (`list_calendars()`, `get_apple_calendar_events()`, …) still work.
 
+> The package/command is still named `icloud-calendar` for backward
+> compatibility, but it now supports several providers (see below).
+
+## Supported providers
+
+**Hosted:** Apple iCloud (`icloud`, default), Fastmail (`fastmail`), Yahoo
+(`yahoo`), Posteo (`posteo`), mailbox.org (`mailbox`), GMX (`gmx`), Google
+(`google`), Microsoft 365 / Outlook (`microsoft`).
+
+**Self-hosted / open-source** (pass `--url https://your-host`): Nextcloud
+(`nextcloud`), ownCloud (`owncloud`), Radicale (`radicale`), Baïkal (`baikal`),
+SOGo (`sogo`), DAViCal (`davical`), Xandikos (`xandikos`), Stalwart
+(`stalwart`), EGroupware (`egroupware`), Cyrus IMAP (`cyrus`), Zimbra
+(`zimbra`), Synology (`synology`), Vikunja (`vikunja`, tasks-only), and any
+RFC-4791 server via `generic`.
+
+| Example | `--provider` | Backend | Auth | Events | Reminders |
+| --- | --- | --- | --- | --- | --- |
+| Apple iCloud *(default)* | `icloud` | CalDAV | app password | ✅ | ✅ |
+| Fastmail | `fastmail` | CalDAV | app password | ✅ | ✅ |
+| Nextcloud (self-hosted) | `nextcloud` | CalDAV (`--url`) | app password | ✅ | ✅ |
+| Vikunja (self-hosted) | `vikunja` | CalDAV (`--url`) | password | ❌ | ✅ |
+| Google | `google` | CalDAV + Tasks API | OAuth token | ✅ | ✅ |
+| Microsoft 365 / Outlook | `microsoft` | Microsoft Graph | OAuth token | ✅ | ✅ |
+
+See **[`COMPATIBILITY.md`](COMPATIBILITY.md)** for the full matrix, and run
+`calendar-manager providers` to print it at any time. For self-hosted presets
+you can pass just the host (`--url https://cloud.example.com`) and the
+conventional DAV path is appended for you.
+
+Google and Microsoft are **experimental**: unit-tested with mocks, require
+OAuth2 credentials, and are not validated against live accounts in CI.
+
+The command is available under two names: **`icloud-calendar`** (kept for
+backward compatibility) and **`calendar-manager`** (provider-neutral alias).
+They are identical.
+
 ## Features
 
+- 🌐 Multiple providers behind one interface (iCloud, Fastmail, Yahoo, Google,
+  Microsoft, generic CalDAV)
 - 📅 List calendars and reminder lists
 - 🔎 List events in a date window (with recurrence expansion)
 - ➕ Create / ✏️ update / ❌ delete events
-- ✅ Full reminder (VTODO) support: list, add, complete, delete
+- ✅ Reminder support (VTODO for CalDAV, Microsoft To Do for Graph): list, add,
+  complete, delete
+- 🕑 Timezone-aware (`--tz`)
 - 🤖 Human-friendly tables **or** `--json` output for scripting
-- 🔐 App-specific-password authentication with clear, actionable errors
-- 🧪 Fully unit-tested without needing a live iCloud connection
+- 🔐 App-password and OAuth-token authentication with clear, actionable errors
+- 🧪 Fully unit-tested without needing a live connection to any provider
 
 ## Requirements
 
 - Python 3.9+
-- An Apple ID with an **app-specific password** (see below)
+- Credentials for your chosen provider (an app-specific password for
+  iCloud/Fastmail/Yahoo, or an OAuth2 token for Google/Microsoft)
+- For the Microsoft Graph backend: `requests` (install with
+  `pip install ".[graph]"`)
 
 ## Installation
 
@@ -65,11 +110,73 @@ set APPLE_PASSWORD=your-app-specific-password
 You can also pass `--apple-id` on the command line; the password is always read
 from `$APPLE_PASSWORD` for safety.
 
+## Using other providers
+
+Select a provider with `--provider`. Credentials can be passed as flags or via
+environment variables (provider-specific aliases, or the generic
+`CALENDAR_USERNAME` / `CALENDAR_PASSWORD` / `CALENDAR_TOKEN` / `CALDAV_URL`).
+
+```bash
+# Fastmail (app password with the CalDAV scope)
+export FASTMAIL_USERNAME='you@fastmail.com'
+export FASTMAIL_PASSWORD='app-password'
+icloud-calendar --provider fastmail check
+
+# Yahoo (app password)
+icloud-calendar --provider yahoo --username you@yahoo.com check   # reads $YAHOO_PASSWORD
+
+# Generic CalDAV / Nextcloud (you supply the URL)
+icloud-calendar --provider generic --url https://cloud.example.com/remote.php/dav/ \
+    --username you --token ''   # or set CALENDAR_PASSWORD
+
+# Google (events via CalDAV + reminders via Google Tasks)
+export GOOGLE_EMAIL='you@gmail.com'
+export GOOGLE_CALENDAR_TOKEN='ya29....'      # an OAuth2 access token you obtained
+icloud-calendar --provider google check
+
+# Microsoft 365 / Outlook via Microsoft Graph (OAuth2 access token)
+export MICROSOFT_TOKEN='eyJ0eXAi....'         # token with Calendars.ReadWrite, Tasks.ReadWrite
+icloud-calendar --provider microsoft check
+```
+
+### OAuth2 for Google and Microsoft
+
+You can authenticate the bearer providers two ways:
+
+1. **Supply an access token directly** with `--token` (or the provider env var
+   above). Simplest, but access tokens are short-lived.
+2. **Supply a refresh token** and let the tool mint access tokens for you. Pass
+   `--refresh-token` with `--client-id` (and `--client-secret` for confidential
+   clients), or set the env vars:
+
+   ```bash
+   # Google
+   export GOOGLE_CLIENT_ID='...' GOOGLE_CLIENT_SECRET='...' GOOGLE_REFRESH_TOKEN='...'
+   icloud-calendar --provider google --username you@gmail.com check
+
+   # Microsoft (optionally set MICROSOFT_TENANT, default "common")
+   export MICROSOFT_CLIENT_ID='...' MICROSOFT_CLIENT_SECRET='...' MICROSOFT_REFRESH_TOKEN='...'
+   icloud-calendar --provider microsoft check
+   ```
+
+The tool performs the OAuth2 **refresh-token grant** to obtain access tokens; it
+does **not** run the initial interactive consent flow. Obtain the refresh token
+once with your own tooling (e.g. `oauth2l`, the Google OAuth Playground, or the
+Azure CLI / MSAL) and provide it as above.
+
+Scopes required: Google — `https://www.googleapis.com/auth/calendar` and
+`https://www.googleapis.com/auth/tasks`; Microsoft — `Calendars.ReadWrite` and
+`Tasks.ReadWrite`.
+
 ## CLI usage
 
 ```bash
+# List the supported providers (no credentials required)
+icloud-calendar providers
+
 # Verify the connection and summarize the account
 icloud-calendar check
+icloud-calendar --provider fastmail check         # any provider
 
 # List calendars and reminder lists
 icloud-calendar calendars list
@@ -177,15 +284,23 @@ from icloud_calendar_manager import (
 
 ```
 icloud_calendar_manager/
-├── __init__.py     # public API + backwards-compatible helpers
-├── __main__.py     # `python -m icloud_calendar_manager`
-├── cli.py          # argparse command-line interface
-├── client.py       # CalDAV client, auth, endpoint discovery + caching
-├── config.py       # credential resolution
-├── exceptions.py   # typed error hierarchy
-├── manager.py      # CalendarManager: events + reminders operations
-└── models.py       # CalendarInfo / EventInfo / ReminderInfo dataclasses
-tests/              # pytest suite (no network required)
+├── __init__.py             # public API + backwards-compatible helpers
+├── __main__.py             # `python -m icloud_calendar_manager`
+├── cli.py                  # argparse command-line interface
+├── client.py               # CalDAV client builders, discovery + caching
+├── config.py               # multi-provider credential resolution (AuthConfig)
+├── providers.py            # provider registry (iCloud, Google, Microsoft, …)
+├── oauth.py                # OAuth2 refresh-token grant + token caching
+├── exceptions.py           # typed error hierarchy
+├── manager.py              # CalendarManager: provider-agnostic facade
+├── models.py               # CalendarInfo / EventInfo / ReminderInfo dataclasses
+└── backends/
+    ├── base.py             # CalendarBackend interface
+    ├── transport.py        # shared bearer-token REST transport
+    ├── caldav_backend.py   # CalDAV backend (iCloud/Fastmail/Yahoo/Google/generic)
+    ├── google_tasks.py     # Google Tasks + composite Google backend
+    └── graph_backend.py    # Microsoft Graph backend (Microsoft 365 / Outlook)
+tests/                      # pytest suite (no network required)
 ```
 
 ## Development

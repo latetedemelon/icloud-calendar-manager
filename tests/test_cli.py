@@ -24,9 +24,64 @@ def test_parse_datetime_formats():
     assert cli.parse_datetime("2026-06-01 13:30:45") == dt.datetime(2026, 6, 1, 13, 30, 45)
 
 
+def test_parser_prog_name_follows_invocation():
+    # When prog is None, argparse derives it from sys.argv[0]; an explicit prog
+    # (as the console-script wrappers effectively provide) is honored.
+    parser = cli.build_parser(prog="calendar-manager")
+    assert parser.prog == "calendar-manager"
+    parser_icloud = cli.build_parser(prog="icloud-calendar")
+    assert parser_icloud.prog == "icloud-calendar"
+
+
+def test_refresh_token_flags_reach_from_provider(monkeypatch):
+    captured = {}
+
+    def fake_from_provider(provider, **kwargs):
+        captured["provider"] = provider
+        captured.update(kwargs)
+        raise cli.ConfigurationError("stop here")  # short-circuit after capture
+
+    monkeypatch.setattr(cli.CalendarManager, "from_provider", staticmethod(fake_from_provider))
+    code = cli.main(
+        [
+            "--provider", "google", "--username", "me@gmail.com",
+            "--refresh-token", "rt", "--client-id", "cid", "--client-secret", "sec",
+            "check",
+        ]
+    )
+    assert code == 2  # ConfigurationError -> EXIT_CONFIG
+    assert captured["provider"] == "google"
+    assert captured["refresh_token"] == "rt"
+    assert captured["client_id"] == "cid"
+    assert captured["client_secret"] == "sec"
+
+
 def test_parse_datetime_invalid():
     with pytest.raises(argparse.ArgumentTypeError):
         cli.parse_datetime("not-a-date")
+
+
+def test_providers_command_needs_no_credentials(monkeypatch):
+    # 'providers' is static; it must work with no manager and no credentials.
+    monkeypatch.delenv("APPLE_ID", raising=False)
+    monkeypatch.delenv("APPLE_PASSWORD", raising=False)
+    stream = io.StringIO()
+    code = cli.main(["providers"], stream=stream)
+    assert code == 0
+    out = stream.getvalue()
+    assert "icloud" in out and "microsoft" in out and "fastmail" in out
+
+
+def test_providers_command_json(monkeypatch):
+    monkeypatch.delenv("APPLE_ID", raising=False)
+    monkeypatch.delenv("APPLE_PASSWORD", raising=False)
+    stream = io.StringIO()
+    code = cli.main(["--json", "providers"], stream=stream)
+    assert code == 0
+    data = json.loads(stream.getvalue())
+    keys = {p["key"] for p in data}
+    # A representative subset across hosted, self-hosted, and generic providers.
+    assert {"icloud", "google", "microsoft", "nextcloud", "vikunja", "generic"} <= keys
 
 
 def test_check_command(manager):

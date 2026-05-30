@@ -23,21 +23,30 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+graph = [
+    # Microsoft Graph backend HTTP client. (requests also ships transitively
+    # with caldav, so this extra is mostly explicit documentation of intent.)
+    "requests>=2.25",
+]
 dev = [
     "pytest>=7.0",
     "flake8>=6.0",
     "tzdata",
+    "requests>=2.25",
 ]
 
 [project.scripts]
+# `icloud-calendar` is kept for backward compatibility; `calendar-manager` is
+# the provider-neutral alias (the tool now supports many providers).
 icloud-calendar = "icloud_calendar_manager.cli:main"
+calendar-manager = "icloud_calendar_manager.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/latetedemelon/icloud-calendar-manager"
 Repository = "https://github.com/latetedemelon/icloud-calendar-manager"
 
 [tool.setuptools]
-packages = ["icloud_calendar_manager"]
+packages = ["icloud_calendar_manager", "icloud_calendar_manager.backends"]
 
 [tool.setuptools.package-data]
 icloud_calendar_manager = ["py.typed"]

@@ -69,6 +69,9 @@ def build_client(
 ) -> caldav.DAVClient:
     """Construct a :class:`caldav.DAVClient` for the given credentials.
 
+    Backwards-compatible iCloud-oriented helper. For multi-provider use see
+    :func:`build_caldav_client`.
+
     Args:
         credentials: Resolved Apple ID + app-specific password.
         url: Explicit base URL. Defaults to the cached partition URL (if a
@@ -82,6 +85,46 @@ def build_client(
         url=base_url,
         username=credentials.apple_id,
         password=credentials.app_password,
+        timeout=timeout,
+    )
+
+
+def build_caldav_client(
+    *,
+    url: str,
+    auth_scheme: str = "basic",
+    username: Optional[str] = None,
+    secret: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    cache: Optional[EndpointCache] = None,
+) -> caldav.DAVClient:
+    """Construct a :class:`caldav.DAVClient` for any CalDAV provider.
+
+    Supports both Basic auth (username + password) and Bearer auth (an OAuth2
+    access token passed as ``secret``), the latter being how Google CalDAV is
+    reached.
+
+    Args:
+        url: Base URL of the CalDAV server.
+        auth_scheme: ``"basic"`` or ``"bearer"``.
+        username: Account username (Basic auth; also used by some bearer hosts).
+        secret: Password (Basic) or OAuth2 access token (Bearer).
+        timeout: Per-request timeout in seconds.
+        cache: Optional cache used to seed a previously discovered base URL.
+    """
+    base_url = (cache.load() if cache else None) or url
+    if auth_scheme == "bearer":
+        logger.debug("Creating CalDAV client (bearer) at %s", base_url)
+        return caldav.DAVClient(
+            url=base_url,
+            headers={"Authorization": f"Bearer {secret}"},
+            timeout=timeout,
+        )
+    logger.debug("Creating CalDAV client (basic) for %s at %s", username, base_url)
+    return caldav.DAVClient(
+        url=base_url,
+        username=username,
+        password=secret,
         timeout=timeout,
     )
 

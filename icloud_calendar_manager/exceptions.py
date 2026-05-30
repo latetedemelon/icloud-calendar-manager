@@ -1,10 +1,14 @@
-"""Custom exceptions for the iCloud Calendar Manager."""
+"""Custom exceptions for the calendar manager."""
 
 from __future__ import annotations
 
 
 class ICloudCalendarError(Exception):
     """Base class for all errors raised by this package."""
+
+
+#: Provider-neutral alias for the base error (the package is multi-provider now).
+CalendarManagerError = ICloudCalendarError
 
 
 class ConfigurationError(ICloudCalendarError):
@@ -33,3 +37,7 @@ class ObjectNotFoundError(ICloudCalendarError):
     def __init__(self, uid: str):
         self.uid = uid
         super().__init__(f"No object with UID {uid!r} was found.")
+
+
+class CapabilityError(ICloudCalendarError):
+    """Raised when a provider does not support a requested operation."""

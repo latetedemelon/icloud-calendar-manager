@@ -73,6 +73,37 @@ def _component_of(obj: Any):
     return None
 
 
+def _parse_graph_datetime(value: Any) -> Optional[dt.datetime]:
+    """Parse a Microsoft Graph ``dateTimeTimeZone`` value into a ``datetime``.
+
+    Graph returns ``{"dateTime": "2026-06-01T12:00:00.0000000", "timeZone":
+    "UTC"}``; the fractional seconds can exceed what ``fromisoformat`` accepts on
+    older Pythons, so they are trimmed to six digits.
+    """
+    if not value:
+        return None
+    if isinstance(value, str):
+        text, tzname = value, None
+    else:
+        text, tzname = value.get("dateTime"), value.get("timeZone")
+    if not text:
+        return None
+    if "." in text:
+        head, _, frac = text.partition(".")
+        text = head + "." + frac.rstrip("Z")[:6]
+    try:
+        parsed = dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None and tzname == "UTC":
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed
+
+
+# Maps Microsoft Graph "importance" to an iCalendar-style PRIORITY integer.
+_GRAPH_IMPORTANCE_TO_PRIORITY = {"low": 9, "normal": 5, "high": 1}
+
+
 @dataclass
 class CalendarInfo:
     """A calendar or reminder list."""
@@ -137,6 +168,23 @@ class EventInfo:
             url=str(getattr(obj, "url", "")) or None,
         )
 
+    @classmethod
+    def from_graph(cls, event: dict, calendar_name: Optional[str] = None) -> "EventInfo":
+        """Build from a Microsoft Graph event resource."""
+        location = (event.get("location") or {}).get("displayName")
+        body = (event.get("body") or {}).get("content") or event.get("bodyPreview")
+        return cls(
+            uid=event.get("id"),
+            summary=event.get("subject"),
+            start=_parse_graph_datetime(event.get("start")),
+            end=_parse_graph_datetime(event.get("end")),
+            location=location or None,
+            description=body or None,
+            all_day=bool(event.get("isAllDay")),
+            calendar=calendar_name,
+            url=event.get("webLink"),
+        )
+
     def to_dict(self) -> dict:
         return {
             "uid": self.uid,
@@ -183,6 +231,26 @@ class ReminderInfo:
             description=_text(comp, "description"),
             list_name=list_name,
             url=str(getattr(obj, "url", "")) or None,
+        )
+
+    @classmethod
+    def from_graph(cls, task: dict, list_name: Optional[str] = None) -> "ReminderInfo":
+        """Build from a Microsoft Graph To Do task resource."""
+        status = task.get("status")
+        completed = status == "completed"
+        body = (task.get("body") or {}).get("content")
+        importance = (task.get("importance") or "").lower()
+        return cls(
+            uid=task.get("id"),
+            summary=task.get("title"),
+            due=_parse_graph_datetime(task.get("dueDateTime")),
+            status=status,
+            priority=_GRAPH_IMPORTANCE_TO_PRIORITY.get(importance),
+            percent_complete=100 if completed else None,
+            completed=completed,
+            description=body or None,
+            list_name=list_name,
+            url=None,
         )
 
     def to_dict(self) -> dict:
