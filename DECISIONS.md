@@ -180,3 +180,33 @@ All three items you approved are implemented:
 
 Still open (unchanged): interactive OAuth consent flow; editing single
 occurrences of recurring events; a credentials config-file.
+
+## 13. 0.6.0 — self-hosted CalDAV presets, capability gating, Obsidian
+
+Scope was chosen with the user: **CalDAV presets + discovery now; no CardDAV;
+investigate (not build) an Obsidian bridge.**
+
+- **Presets over new protocols.** Every RFC-4791 server already worked through
+  `generic --url`. Rather than add protocols, 0.6.0 adds *named presets*
+  (Nextcloud, ownCloud, Radicale, Baïkal, SOGo, DAViCal, Zimbra, Synology,
+  Vikunja; plus hosted Posteo/mailbox.org/GMX) that supply the right DAV path
+  and accurate capability flags. Decision: presets are data in the registry, so
+  adding more is a one-entry change, and `generic` remains the catch-all.
+- **URL resolution is a pure function** (`resolve_provider_url`) that appends a
+  provider's `path_suffix` to a bare host and is idempotent. Kept pure so it is
+  unit-tested without a network. Trailing-slash normalization is intentional and
+  harmless for CalDAV.
+- **Events capability gate.** Added `supports_events` to mirror
+  `supports_reminders`, so tasks-only servers (**Vikunja**) reject event
+  operations with `CapabilityError` instead of confusing server errors.
+- **CardDAV / contacts: deliberately excluded.** The user chose calendars-only
+  for now. Contacts would be a new domain (address books, vCards) and overlaps a
+  separate private contact-merge client; revisit if those should converge.
+- **Obsidian: not a provider.** It is not a CalDAV/CardDAV server, so it cannot
+  be added to the registry. Per the user's choice, `OBSIDIAN.md` records an
+  investigation of a one-directional Markdown/ICS **export bridge** as a possible
+  future, separate feature; nothing was implemented.
+- **`.well-known` discovery.** A `well_known_url` helper and provider flag are in
+  place; the `caldav` library already follows the server's redirects during
+  principal discovery, so this is a thin, mostly-future-proofing addition rather
+  than a custom discovery client.

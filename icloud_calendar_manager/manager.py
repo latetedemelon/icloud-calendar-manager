@@ -48,6 +48,7 @@ class CalendarManager:
         session: Any = None,
         oauth: Any = None,
         supports_reminders: bool = True,
+        supports_events: bool = True,
     ):
         self._backend = backend
         self._principal = principal
@@ -60,6 +61,7 @@ class CalendarManager:
         self._session = session
         self._oauth = oauth
         self._supports_reminders = supports_reminders
+        self._supports_events = supports_events
 
     # -- construction helpers ------------------------------------------------
 
@@ -109,6 +111,7 @@ class CalendarManager:
             session=session,
             oauth=oauth,
             supports_reminders=auth.provider.supports_reminders,
+            supports_events=auth.provider.supports_events,
         )
 
     @classmethod
@@ -136,7 +139,12 @@ class CalendarManager:
         auth = resolve_auth(
             DEFAULT_PROVIDER, url=url, username=apple_id, secret=app_password, timeout=timeout
         )
-        return cls(auth=auth, cache=cache, supports_reminders=auth.provider.supports_reminders)
+        return cls(
+            auth=auth,
+            cache=cache,
+            supports_reminders=auth.provider.supports_reminders,
+            supports_events=auth.provider.supports_events,
+        )
 
     # -- backend resolution --------------------------------------------------
 
@@ -186,6 +194,13 @@ class CalendarManager:
 
     # -- events --------------------------------------------------------------
 
+    def _require_events(self) -> None:
+        if not self._supports_events:
+            raise CapabilityError(
+                "This provider does not support calendar events via this tool "
+                "(it is tasks/reminders only)."
+            )
+
     def list_events(
         self,
         calendar_name: str,
@@ -195,10 +210,12 @@ class CalendarManager:
         expand: bool = True,
     ) -> List[EventInfo]:
         """Return events in ``calendar_name`` between ``start`` and ``end``."""
+        self._require_events()
         return self.backend.list_events(calendar_name, start, end, expand=expand)
 
     def get_event(self, calendar_name: str, uid: str) -> EventInfo:
         """Fetch a single event by UID."""
+        self._require_events()
         return self.backend.get_event(calendar_name, uid)
 
     def add_event(
@@ -213,6 +230,7 @@ class CalendarManager:
         uid: Optional[str] = None,
     ) -> EventInfo:
         """Create an event and return its parsed representation."""
+        self._require_events()
         return self.backend.add_event(
             calendar_name, summary, start, end,
             location=location, description=description, uid=uid,
@@ -230,6 +248,7 @@ class CalendarManager:
         description: Optional[str] = None,
     ) -> EventInfo:
         """Update fields of an existing event. Only provided fields change."""
+        self._require_events()
         return self.backend.update_event(
             calendar_name, uid, summary=summary, start=start, end=end,
             location=location, description=description,
@@ -237,6 +256,7 @@ class CalendarManager:
 
     def delete_event(self, calendar_name: str, uid: str) -> None:
         """Delete an event by UID."""
+        self._require_events()
         self.backend.delete_event(calendar_name, uid)
 
     # -- reminders -----------------------------------------------------------

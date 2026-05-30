@@ -129,11 +129,14 @@ def _cmd_providers(args, manager, stream) -> int:
                 "label": provider.label,
                 "backend": provider.backend,
                 "auth": provider.auth_scheme,
+                "events": provider.supports_events,
                 "reminders": provider.supports_reminders,
+                "self_hosted": provider.self_hosted,
                 "experimental": provider.experimental,
             }
         )
-    _emit(rows, ["key", "label", "backend", "auth", "reminders", "experimental"], args.json, stream)
+    columns = ["key", "label", "backend", "auth", "events", "reminders", "self_hosted", "experimental"]
+    _emit(rows, columns, args.json, stream)
     return EXIT_OK
 
 

@@ -16,19 +16,31 @@ It can be used three ways:
 
 ## Supported providers
 
-| Provider | `--provider` | Backend | Auth | Reminders |
-| --- | --- | --- | --- | --- |
-| Apple iCloud *(default)* | `icloud` | CalDAV | app password | ✅ |
-| Fastmail | `fastmail` | CalDAV | app password | ✅ |
-| Yahoo | `yahoo` | CalDAV | app password | ✅ |
-| Generic / Nextcloud | `generic` | CalDAV (`--url`) | password | ✅ |
-| Google Calendar | `google` | CalDAV + Tasks API | OAuth token | ✅ (Google Tasks) |
-| Microsoft 365 / Outlook | `microsoft` | Microsoft Graph | OAuth token | ✅ (To Do) |
+**Hosted:** Apple iCloud (`icloud`, default), Fastmail (`fastmail`), Yahoo
+(`yahoo`), Posteo (`posteo`), mailbox.org (`mailbox`), GMX (`gmx`), Google
+(`google`), Microsoft 365 / Outlook (`microsoft`).
 
-Run `icloud-calendar providers` to see this list at any time. Google and
-Microsoft are marked **experimental**: they are unit-tested with mocks but
-require you to supply OAuth2 credentials, and have not been validated against
-live accounts in CI.
+**Self-hosted / open-source** (pass `--url https://your-host`): Nextcloud
+(`nextcloud`), ownCloud (`owncloud`), Radicale (`radicale`), Baïkal (`baikal`),
+SOGo (`sogo`), DAViCal (`davical`), Zimbra (`zimbra`), Synology (`synology`),
+Vikunja (`vikunja`, tasks-only), and any RFC-4791 server via `generic`.
+
+| Example | `--provider` | Backend | Auth | Events | Reminders |
+| --- | --- | --- | --- | --- | --- |
+| Apple iCloud *(default)* | `icloud` | CalDAV | app password | ✅ | ✅ |
+| Fastmail | `fastmail` | CalDAV | app password | ✅ | ✅ |
+| Nextcloud (self-hosted) | `nextcloud` | CalDAV (`--url`) | app password | ✅ | ✅ |
+| Vikunja (self-hosted) | `vikunja` | CalDAV (`--url`) | password | ❌ | ✅ |
+| Google | `google` | CalDAV + Tasks API | OAuth token | ✅ | ✅ |
+| Microsoft 365 / Outlook | `microsoft` | Microsoft Graph | OAuth token | ✅ | ✅ |
+
+See **[`COMPATIBILITY.md`](COMPATIBILITY.md)** for the full matrix, and run
+`calendar-manager providers` to print it at any time. For self-hosted presets
+you can pass just the host (`--url https://cloud.example.com`) and the
+conventional DAV path is appended for you.
+
+Google and Microsoft are **experimental**: unit-tested with mocks, require
+OAuth2 credentials, and are not validated against live accounts in CI.
 
 The command is available under two names: **`icloud-calendar`** (kept for
 backward compatibility) and **`calendar-manager`** (provider-neutral alias).

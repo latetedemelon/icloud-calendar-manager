@@ -24,6 +24,7 @@ from .providers import (
     SECRET_OAUTH_TOKEN,
     Provider,
     get_provider,
+    resolve_provider_url,
 )
 
 # Base CalDAV endpoint. iCloud redirects this to the account's "partition"
@@ -182,7 +183,10 @@ def resolve_auth(
     env_user, env_secret = _PROVIDER_ENV.get(provider.key, (None, None))
     is_bearer = provider.auth_scheme == AUTH_BEARER
 
-    resolved_url = url or os.getenv(ENV_URL) or provider.base_url
+    # Combine a user-supplied host with the provider's preset path (e.g.
+    # Nextcloud's /remote.php/dav); falls back to the provider's fixed base_url.
+    given_url = url or os.getenv(ENV_URL)
+    resolved_url = resolve_provider_url(provider, given_url)
     resolved_user = username or _first_env(env_user, ENV_USERNAME)
     if is_bearer:
         resolved_secret = secret or _first_env(env_secret, ENV_TOKEN)
@@ -191,7 +195,7 @@ def resolve_auth(
 
     missing = []
     if not resolved_url:
-        missing.append("URL (pass --url; required for the 'generic' provider)")
+        missing.append("URL (pass --url; required for self-hosted providers)")
     if provider.requires_username and not resolved_user:
         missing.append("username (pass --username or set the provider's env var)")
     if not resolved_secret and not allow_missing_secret:

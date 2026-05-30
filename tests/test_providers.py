@@ -126,7 +126,26 @@ def test_generic_requires_url():
 
 def test_generic_with_url_ok():
     auth = resolve_auth("generic", url="https://dav.example.com/", username="u", secret="p")
-    assert auth.url == "https://dav.example.com/"
+    # A trailing slash on the supplied URL is normalized away.
+    assert auth.url == "https://dav.example.com"
+
+
+def test_resolve_auth_applies_nextcloud_path_suffix():
+    # resolve_auth should combine the bare host with the provider's preset path.
+    auth = resolve_auth("nextcloud", url="https://cloud.example.com", username="u", secret="pw")
+    assert auth.url == "https://cloud.example.com/remote.php/dav"
+
+
+def test_resolve_auth_baikal_suffix():
+    auth = resolve_auth("baikal", url="https://dav.example.com", username="u", secret="pw")
+    assert auth.url == "https://dav.example.com/dav.php"
+
+
+def test_resolve_auth_nextcloud_requires_url():
+    # Self-hosted providers have no default host; a URL is mandatory.
+    with pytest.raises(ConfigurationError) as exc:
+        resolve_auth("nextcloud", username="u", secret="pw")
+    assert "URL" in str(exc.value)
 
 
 def test_missing_secret_message_mentions_token_for_bearer():
@@ -148,7 +167,7 @@ def test_generic_env_vars(monkeypatch):
     monkeypatch.setenv("CALENDAR_USERNAME", "alice")
     monkeypatch.setenv("CALENDAR_PASSWORD", "secret")
     auth = resolve_auth("generic")
-    assert auth.url == "https://dav.example.org/"
+    assert auth.url == "https://dav.example.org"  # trailing slash normalized
     assert auth.username == "alice"
     assert auth.secret == "secret"
 

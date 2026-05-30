@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] - 2026-05-30
+
+Broaden coverage to the major self-hosted / open-source CalDAV servers via named
+presets, and make per-provider capabilities explicit.
+
+### Added
+- **Self-hosted CalDAV presets:** `nextcloud`, `owncloud`, `radicale`, `baikal`,
+  `sogo`, `davical`, `zimbra`, `synology`, and `vikunja`, plus hosted `posteo`,
+  `mailbox` (mailbox.org), and `gmx`. Each carries the correct DAV path and
+  capability flags. (Any RFC-4791 server already worked via `generic`; these add
+  convenience and accuracy.)
+- **URL/path resolution** (`resolve_provider_url`): pass a bare host
+  (`--url https://cloud.example.com`) and the provider's conventional DAV path
+  (e.g. Nextcloud's `/remote.php/dav`) is appended automatically; idempotent if
+  the full path is already given. Trailing slashes are normalized.
+- **`/.well-known/caldav` helper** (`well_known_url`) and a `well_known` flag on
+  self-hosted providers.
+- **Events capability gate:** providers now declare `supports_events`; tasks-only
+  servers (Vikunja) reject event operations with a clear `CapabilityError`, the
+  mirror of the existing reminders gate.
+- **`providers` command** now reports `events`, `self_hosted`, and `experimental`
+  columns.
+- New docs: `COMPATIBILITY.md` (full provider matrix) and `OBSIDIAN.md`
+  (investigation of a possible export bridge — not implemented).
+
+### Changed
+- `resolve_auth` combines the supplied host with the provider's preset path and
+  normalizes trailing slashes (a bare `https://host/` now yields `https://host`).
+- The "missing URL" error now refers to self-hosted providers generally, not
+  just `generic`.
+
+### Notes
+- **Obsidian** is intentionally **not** a provider — it is not a CalDAV/CardDAV
+  server. See `OBSIDIAN.md`.
+- **CardDAV / contacts** remain out of scope (calendars + reminders only).
+- 129 tests passing; self-hosted and OAuth providers remain unvalidated against
+  live instances in CI.
+
 ## [0.5.0] - 2026-05-29
 
 Follow-ups to multi-provider support, addressing the three review items from
