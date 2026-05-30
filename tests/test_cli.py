@@ -79,9 +79,9 @@ def test_providers_command_json(monkeypatch):
     code = cli.main(["--json", "providers"], stream=stream)
     assert code == 0
     data = json.loads(stream.getvalue())
-    assert {p["key"] for p in data} == {
-        "icloud", "fastmail", "yahoo", "google", "microsoft", "generic"
-    }
+    keys = {p["key"] for p in data}
+    # A representative subset across hosted, self-hosted, and generic providers.
+    assert {"icloud", "google", "microsoft", "nextcloud", "vikunja", "generic"} <= keys
 
 
 def test_check_command(manager):

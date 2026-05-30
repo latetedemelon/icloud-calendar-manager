@@ -12,6 +12,8 @@ from icloud_calendar_manager.providers import (
     DEFAULT_PROVIDER,
     PROVIDERS,
     get_provider,
+    resolve_provider_url,
+    well_known_url,
 )
 
 
@@ -21,11 +23,69 @@ def test_default_provider_is_icloud():
 
 
 def test_all_expected_providers_registered():
-    assert set(PROVIDERS) == {"icloud", "fastmail", "yahoo", "google", "microsoft", "generic"}
+    # Hosted services, self-hosted open-source servers, and the generic escape hatch.
+    expected = {
+        "icloud", "fastmail", "yahoo", "posteo", "mailbox", "gmx",
+        "google", "microsoft",
+        "nextcloud", "owncloud", "radicale", "baikal", "sogo", "davical",
+        "zimbra", "synology", "vikunja",
+        "generic",
+    }
+    assert set(PROVIDERS) == expected
 
 
 def test_microsoft_uses_graph_backend():
     assert get_provider("microsoft").backend == BACKEND_GRAPH
+
+
+def test_self_hosted_providers_require_url():
+    # Self-hosted servers have no fixed host; base_url is None until --url given.
+    for key in ("nextcloud", "radicale", "baikal", "sogo", "davical", "vikunja", "generic"):
+        assert get_provider(key).base_url is None
+        assert get_provider(key).self_hosted is True
+
+
+def test_resolve_provider_url_appends_path_suffix():
+    nc = get_provider("nextcloud")
+    assert resolve_provider_url(nc, "https://cloud.example.com") == (
+        "https://cloud.example.com/remote.php/dav"
+    )
+    # Trailing slash is normalized.
+    assert resolve_provider_url(nc, "https://cloud.example.com/") == (
+        "https://cloud.example.com/remote.php/dav"
+    )
+
+
+def test_resolve_provider_url_does_not_double_append():
+    nc = get_provider("nextcloud")
+    already = "https://cloud.example.com/remote.php/dav/"
+    assert resolve_provider_url(nc, already) == "https://cloud.example.com/remote.php/dav"
+
+
+def test_resolve_provider_url_uses_base_when_no_url():
+    icloud = get_provider("icloud")
+    assert resolve_provider_url(icloud, None) == "https://caldav.icloud.com"
+
+
+def test_resolve_provider_url_no_suffix_provider():
+    radicale = get_provider("radicale")  # no path_suffix
+    assert resolve_provider_url(radicale, "https://r.example.com/dav") == (
+        "https://r.example.com/dav"
+    )
+
+
+def test_well_known_url_derivation():
+    assert well_known_url("https://cloud.example.com/remote.php/dav") == (
+        "https://cloud.example.com/.well-known/caldav"
+    )
+    # Bare host without scheme defaults to https.
+    assert well_known_url("cloud.example.com") == "https://cloud.example.com/.well-known/caldav"
+
+
+def test_vikunja_is_tasks_only():
+    vikunja = get_provider("vikunja")
+    assert vikunja.supports_events is False
+    assert vikunja.supports_reminders is True
 
 
 def test_unknown_provider_raises():
