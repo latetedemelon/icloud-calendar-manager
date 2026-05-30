@@ -10,10 +10,10 @@ presets, and make per-provider capabilities explicit.
 
 ### Added
 - **Self-hosted CalDAV presets:** `nextcloud`, `owncloud`, `radicale`, `baikal`,
-  `sogo`, `davical`, `zimbra`, `synology`, and `vikunja`, plus hosted `posteo`,
-  `mailbox` (mailbox.org), and `gmx`. Each carries the correct DAV path and
-  capability flags. (Any RFC-4791 server already worked via `generic`; these add
-  convenience and accuracy.)
+  `sogo`, `davical`, `xandikos`, `stalwart`, `egroupware`, `cyrus`, `zimbra`,
+  `synology`, and `vikunja`, plus hosted `posteo`, `mailbox` (mailbox.org), and
+  `gmx`. Each carries the correct DAV path and capability flags. (Any RFC-4791
+  server already worked via `generic`; these add convenience and accuracy.)
 - **URL/path resolution** (`resolve_provider_url`): pass a bare host
   (`--url https://cloud.example.com`) and the provider's conventional DAV path
   (e.g. Nextcloud's `/remote.php/dav`) is appended automatically; idempotent if

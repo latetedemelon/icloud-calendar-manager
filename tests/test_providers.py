@@ -28,6 +28,7 @@ def test_all_expected_providers_registered():
         "icloud", "fastmail", "yahoo", "posteo", "mailbox", "gmx",
         "google", "microsoft",
         "nextcloud", "owncloud", "radicale", "baikal", "sogo", "davical",
+        "xandikos", "stalwart", "egroupware", "cyrus",
         "zimbra", "synology", "vikunja",
         "generic",
     }
@@ -139,6 +140,21 @@ def test_resolve_auth_applies_nextcloud_path_suffix():
 def test_resolve_auth_baikal_suffix():
     auth = resolve_auth("baikal", url="https://dav.example.com", username="u", secret="pw")
     assert auth.url == "https://dav.example.com/dav.php"
+
+
+def test_resolve_auth_egroupware_and_cyrus_suffixes():
+    eg = resolve_auth("egroupware", url="https://eg.example.com", username="u", secret="pw")
+    assert eg.url == "https://eg.example.com/groupdav.php"
+    cy = resolve_auth("cyrus", url="https://cyrus.example.com", username="u", secret="pw")
+    assert cy.url == "https://cyrus.example.com/dav"
+
+
+def test_resolve_auth_suffixless_servers_passthrough():
+    # Xandikos and Stalwart have no fixed path; the URL is used as given.
+    xa = resolve_auth("xandikos", url="https://x.example.com/dav", username="u", secret="pw")
+    assert xa.url == "https://x.example.com/dav"
+    st = resolve_auth("stalwart", url="https://s.example.com", username="u", secret="pw")
+    assert st.url == "https://s.example.com"
 
 
 def test_resolve_auth_nextcloud_requires_url():

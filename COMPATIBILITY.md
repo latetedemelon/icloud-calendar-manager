@@ -35,8 +35,12 @@ supported.
 | `owncloud` | ✅ | ✅ | `/remote.php/dav` | Use an app password. |
 | `radicale` | ✅ | ✅ | — | Point `--url` at the collection root. |
 | `baikal` | ✅ | ✅ | `/dav.php` | sabre/dav based. |
-| `sogo` | ✅ | ✅ | `/SOGo/dav` | |
+| `sogo` | ✅ | ✅ | `/SOGo/dav` | Also covers mailcow's bundled SOGo. |
 | `davical` | ✅ | ✅ | `/caldav.php` | |
+| `xandikos` | ✅ | ✅ | — | Git-backed CalDAV/CardDAV; point `--url` at the route root. |
+| `stalwart` | ✅ | ✅ | — | All-in-one Rust mail/collab server; `.well-known` autodiscovery. |
+| `egroupware` | ✅ | ✅ | `/groupdav.php` | |
+| `cyrus` | ✅ | ✅ | `/dav` | Cyrus IMAP's CalDAV/JMAP module. |
 | `zimbra` | ✅ | ✅ | `/dav` | |
 | `synology` | ✅ | ✅ | — | Synology Calendar's CalDAV port (e.g. `:5001`). |
 | `vikunja` | ❌ | ✅ (tasks) | `/dav` | **Tasks only** — Vikunja exposes no events; event commands raise a capability error. Experimental/alpha CalDAV. |
@@ -57,6 +61,19 @@ Each provider declares whether it supports **events** and **reminders**. If you
 call an unsupported operation (e.g. `events add` on Vikunja, or `reminders` on a
 calendar-only CalDAV server), the tool raises a clear `CapabilityError` instead
 of producing a confusing server error.
+
+## Known to work via `generic` (no dedicated preset yet)
+
+These are RFC-4791 servers that work today with `--provider generic --url <full DAV URL>`.
+They don't have a named preset because their deployments vary or they're
+enterprise/legacy; a preset can be added on request once a canonical path is
+confirmed:
+
+- **Bedework** (enterprise calendar server)
+- **Kopano** / **Horde** (groupware suites)
+- **mailcow** (ships SOGo — use `--provider sogo`)
+- Generic **sabre/dav**-based servers (use `--provider baikal`-style `/dav.php`,
+  or pass the explicit URL)
 
 ## What is **not** supported
 

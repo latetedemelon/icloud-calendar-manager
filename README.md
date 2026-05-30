@@ -22,8 +22,10 @@ It can be used three ways:
 
 **Self-hosted / open-source** (pass `--url https://your-host`): Nextcloud
 (`nextcloud`), ownCloud (`owncloud`), Radicale (`radicale`), Baïkal (`baikal`),
-SOGo (`sogo`), DAViCal (`davical`), Zimbra (`zimbra`), Synology (`synology`),
-Vikunja (`vikunja`, tasks-only), and any RFC-4791 server via `generic`.
+SOGo (`sogo`), DAViCal (`davical`), Xandikos (`xandikos`), Stalwart
+(`stalwart`), EGroupware (`egroupware`), Cyrus IMAP (`cyrus`), Zimbra
+(`zimbra`), Synology (`synology`), Vikunja (`vikunja`, tasks-only), and any
+RFC-4791 server via `generic`.
 
 | Example | `--provider` | Backend | Auth | Events | Reminders |
 | --- | --- | --- | --- | --- | --- |
